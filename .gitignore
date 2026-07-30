@@ -1,0 +1,9 @@
+target/
+**/target/
+application/target/
+common/*/target/
+ui-ngx/node_modules/
+.idea/
+*.log
+*.class
+.DS_Store
