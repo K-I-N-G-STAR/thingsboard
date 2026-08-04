@@ -58,7 +58,7 @@
                         <configuration>
                             <nodeVersion>v22.22.2</nodeVersion>
                             <yarnVersion>v1.22.22</yarnVersion>
-                            <yarnDownloadRoot>file:///D:/workplace/thingsboard/</yarnDownloadRoot>
+                            <yarnDownloadRoot>file://${maven.multiModuleProjectDirectory}/tools/yarn/</yarnDownloadRoot>
                         </configuration>
                     </execution>
                     <execution>
