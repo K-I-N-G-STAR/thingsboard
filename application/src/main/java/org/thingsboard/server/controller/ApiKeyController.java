@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.thingsboard.server.common.data.User;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.ApiKeyId;
 import org.thingsboard.server.common.data.id.UserId;
 import org.thingsboard.server.common.data.page.PageData;
@@ -41,6 +42,7 @@ import org.thingsboard.server.common.data.pat.ApiKeyInfo;
 import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.pat.ApiKeyService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
@@ -66,6 +68,7 @@ import static org.thingsboard.server.controller.ControllerConstants.USER_ID_PARA
 public class ApiKeyController extends BaseController {
 
     private final ApiKeyService apiKeyService;
+    private final FactoryAccessService factoryAccessService;
 
     @ApiOperation(value = "Save API key for user (saveApiKey)",
             notes = "Creates an API key for the given user and returns the token ONCE as 'ApiKey {value}'." + AVAILABLE_FOR_ANY_AUTHORIZED_USER)
@@ -74,9 +77,11 @@ public class ApiKeyController extends BaseController {
     public ApiKey saveApiKey(
             @Parameter(description = "A JSON value representing the Api Key token.")
             @RequestBody @Valid ApiKeyInfo apiKeyInfo) throws ThingsboardException {
-        User user = checkUserId(apiKeyInfo.getUserId(), Operation.WRITE);
+        UserId userId = apiKeyInfo.getUserId();
+        User user = checkUserId(userId, Operation.WRITE);
         apiKeyInfo.setTenantId(user.getTenantId());
         checkEntity(apiKeyInfo.getId(), apiKeyInfo, Resource.API_KEY);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.API_KEY_MANAGE, userId);
         ApiKey savedApiKey = checkNotNull(apiKeyService.saveApiKey(apiKeyInfo.getTenantId(), apiKeyInfo));
         if (apiKeyInfo.getId() != null) {
             savedApiKey.setValue(null);
@@ -107,6 +112,7 @@ public class ApiKeyController extends BaseController {
         UserId userId = new UserId(toUUID(userIdStr));
         accessControlService.checkPermission(securityUser, Resource.API_KEY, Operation.READ);
         User user = checkUserId(userId, Operation.READ);
+        factoryAccessService.checkPermission(securityUser, FactoryPermissionCodes.API_KEY_MANAGE, userId);
         return apiKeyService.findApiKeysByUserId(user.getTenantId(), userId, pageLink);
     }
 
@@ -124,6 +130,7 @@ public class ApiKeyController extends BaseController {
         ApiKeyId apiKeyId = new ApiKeyId(id);
         ApiKey apiKey = checkApiKeyId(apiKeyId, Operation.WRITE);
         checkUserId(apiKey.getUserId(), Operation.WRITE);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.API_KEY_MANAGE, apiKey.getUserId());
         apiKey.setDescription(description.orElse(null));
         return new ApiKeyInfo(apiKeyService.saveApiKey(apiKey.getTenantId(), apiKey));
     }
@@ -140,6 +147,7 @@ public class ApiKeyController extends BaseController {
         ApiKeyId apiKeyId = new ApiKeyId(id);
         ApiKey apiKey = checkApiKeyId(apiKeyId, Operation.WRITE);
         checkUserId(apiKey.getUserId(), Operation.WRITE);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.API_KEY_MANAGE, apiKey.getUserId());
         apiKey.setEnabled(enabledValue);
         return new ApiKeyInfo(apiKeyService.saveApiKey(apiKey.getTenantId(), apiKey));
     }
@@ -152,6 +160,7 @@ public class ApiKeyController extends BaseController {
         ApiKeyId apiKeyId = new ApiKeyId(id);
         ApiKey apiKey = checkApiKeyId(apiKeyId, Operation.DELETE);
         checkUserId(apiKey.getUserId(), Operation.WRITE);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.API_KEY_MANAGE, apiKey.getUserId());
         apiKeyService.deleteApiKey(apiKey.getTenantId(), apiKey, false);
     }
 

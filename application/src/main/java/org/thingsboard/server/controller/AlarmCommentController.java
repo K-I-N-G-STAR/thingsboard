@@ -33,6 +33,7 @@ import org.thingsboard.server.common.data.alarm.AlarmCommentInfo;
 import org.thingsboard.server.common.data.alarm.AlarmCommentType;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.AlarmCommentId;
 import org.thingsboard.server.common.data.id.AlarmId;
 import org.thingsboard.server.common.data.page.PageData;
@@ -40,6 +41,7 @@ import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.alarm.TbAlarmCommentService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -63,6 +65,7 @@ public class AlarmCommentController extends BaseController {
     public static final String ALARM_COMMENT_ID = "commentId";
 
     private final TbAlarmCommentService tbAlarmCommentService;
+    private final FactoryAccessService factoryAccessService;
 
     @ApiOperation(value = "Create or update Alarm Comment ",
             notes = "Creates or Updates the Alarm Comment. " +
@@ -80,6 +83,7 @@ public class AlarmCommentController extends BaseController {
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmInfoId(alarmId, Operation.WRITE);
         SecurityUser currentUser = getCurrentUser();
+        factoryAccessService.checkPermission(currentUser, FactoryPermissionCodes.ALARM_COMMENT_WRITE, alarm.getOriginator());
         if (alarmComment.getId() != null) {
             checkUserPermission(alarmComment, alarmId, "edit", currentUser);
         }
@@ -100,6 +104,7 @@ public class AlarmCommentController extends BaseController {
         AlarmCommentId alarmCommentId = new AlarmCommentId(toUUID(strCommentId));
         AlarmComment alarmComment = checkAlarmCommentId(alarmCommentId, alarmId);
         SecurityUser currentUser = getCurrentUser();
+        factoryAccessService.checkPermission(currentUser, FactoryPermissionCodes.ALARM_COMMENT_WRITE, alarm.getOriginator());
         if (!currentUser.isTenantAdmin()) {
             checkUserPermission(alarmComment, alarmId, "delete", currentUser);
         }
@@ -126,6 +131,7 @@ public class AlarmCommentController extends BaseController {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmId, Operation.READ);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_COMMENT_READ, alarm.getOriginator());
         PageLink pageLink = createPageLink(pageSize, page, null, sortProperty, sortOrder);
         return checkNotNull(alarmCommentService.findAlarmComments(alarm.getTenantId(), alarmId, pageLink));
     }

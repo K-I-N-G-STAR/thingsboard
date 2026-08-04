@@ -38,6 +38,7 @@ import org.thingsboard.server.common.data.OtaPackage;
 import org.thingsboard.server.common.data.OtaPackageInfo;
 import org.thingsboard.server.common.data.SaveOtaPackageInfoRequest;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.DeviceProfileId;
 import org.thingsboard.server.common.data.id.OtaPackageId;
 import org.thingsboard.server.common.data.ota.ChecksumAlgorithm;
@@ -47,6 +48,7 @@ import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.ota.TbOtaPackageService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
 
@@ -73,6 +75,7 @@ import static org.thingsboard.server.controller.ControllerConstants.UUID_WIKI_LI
 public class OtaPackageController extends BaseController {
 
     private final TbOtaPackageService tbOtaPackageService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String OTA_PACKAGE_ID = "otaPackageId";
     public static final String CHECKSUM_ALGORITHM = "checksumAlgorithm";
@@ -85,6 +88,7 @@ public class OtaPackageController extends BaseController {
         checkParameter(OTA_PACKAGE_ID, strOtaPackageId);
         OtaPackageId otaPackageId = new OtaPackageId(toUUID(strOtaPackageId));
         OtaPackage otaPackage = checkOtaPackageId(otaPackageId, Operation.READ);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
 
         if (otaPackage.hasUrl()) {
             return ResponseEntity.badRequest().build();
@@ -108,6 +112,7 @@ public class OtaPackageController extends BaseController {
                                                 @PathVariable(OTA_PACKAGE_ID) String strOtaPackageId) throws ThingsboardException {
         checkParameter(OTA_PACKAGE_ID, strOtaPackageId);
         OtaPackageId otaPackageId = new OtaPackageId(toUUID(strOtaPackageId));
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         return checkNotNull(otaPackageService.findOtaPackageInfoById(getTenantId(), otaPackageId));
     }
 
@@ -120,6 +125,7 @@ public class OtaPackageController extends BaseController {
                                         @PathVariable(OTA_PACKAGE_ID) String strOtaPackageId) throws ThingsboardException {
         checkParameter(OTA_PACKAGE_ID, strOtaPackageId);
         OtaPackageId otaPackageId = new OtaPackageId(toUUID(strOtaPackageId));
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         return checkOtaPackageId(otaPackageId, Operation.READ);
     }
 
@@ -135,6 +141,7 @@ public class OtaPackageController extends BaseController {
                                              @RequestBody SaveOtaPackageInfoRequest otaPackageInfo) throws Exception {
         otaPackageInfo.setTenantId(getTenantId());
         checkEntity(otaPackageInfo.getId(), otaPackageInfo, Resource.OTA_PACKAGE);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
 
         return tbOtaPackageService.save(otaPackageInfo, getCurrentUser());
     }
@@ -156,6 +163,7 @@ public class OtaPackageController extends BaseController {
         checkParameter(CHECKSUM_ALGORITHM, checksumAlgorithmStr);
         OtaPackageId otaPackageId = new OtaPackageId(toUUID(strOtaPackageId));
         OtaPackageInfo otaPackageInfo = checkOtaPackageInfoId(otaPackageId, Operation.READ);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         ChecksumAlgorithm checksumAlgorithm = ChecksumAlgorithm.valueOf(checksumAlgorithmStr.toUpperCase());
         byte[] data = file.getBytes();
         return tbOtaPackageService.saveOtaPackageData(otaPackageInfo, checksum, checksumAlgorithm,
@@ -178,6 +186,7 @@ public class OtaPackageController extends BaseController {
                                                    @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
                                                    @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         return checkNotNull(otaPackageService.findTenantOtaPackagesByTenantId(getTenantId(), pageLink));
     }
 
@@ -203,6 +212,7 @@ public class OtaPackageController extends BaseController {
         checkParameter("deviceProfileId", strDeviceProfileId);
         checkParameter("type", strType);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         return checkNotNull(otaPackageService.findTenantOtaPackagesByTenantIdAndDeviceProfileIdAndTypeAndHasData(getTenantId(),
                 new DeviceProfileId(toUUID(strDeviceProfileId)), OtaPackageType.valueOf(strType), pageLink));
     }
@@ -217,6 +227,7 @@ public class OtaPackageController extends BaseController {
         checkParameter(OTA_PACKAGE_ID, strOtaPackageId);
         OtaPackageId otaPackageId = new OtaPackageId(toUUID(strOtaPackageId));
         OtaPackageInfo otaPackageInfo = checkOtaPackageInfoId(otaPackageId, Operation.DELETE);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.OTA_MANAGE);
         tbOtaPackageService.delete(otaPackageInfo, getCurrentUser());
     }
 

@@ -29,10 +29,12 @@ import org.thingsboard.server.common.data.exception.ThingsboardException;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.id.UserId;
+import org.thingsboard.server.common.data.security.Authority;
 import org.thingsboard.server.common.data.security.UserCredentials;
 import org.thingsboard.server.dao.user.UserService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.AbstractTbEntityService;
+import org.thingsboard.server.service.security.factory.FactoryRoleBootstrapService;
 import org.thingsboard.server.service.security.system.SystemSecurityService;
 
 @Service
@@ -44,14 +46,19 @@ public class DefaultUserService extends AbstractTbEntityService implements TbUse
     private final UserService userService;
     private final MailService mailService;
     private final SystemSecurityService systemSecurityService;
+    private final FactoryRoleBootstrapService factoryRoleBootstrapService;
 
     @Override
     public User save(TenantId tenantId, CustomerId customerId, User tbUser, boolean sendActivationMail,
                      HttpServletRequest request, User user) throws ThingsboardException {
         ActionType actionType = tbUser.getId() == null ? ActionType.ADDED : ActionType.UPDATED;
+        boolean created = tbUser.getId() == null;
         try {
-            boolean sendEmail = tbUser.getId() == null && sendActivationMail;
+            boolean sendEmail = created && sendActivationMail;
             User savedUser = checkNotNull(userService.saveUser(tenantId, tbUser));
+            if (created && Authority.TENANT_ADMIN.equals(savedUser.getAuthority())) {
+                factoryRoleBootstrapService.assignFactoryAdminToTenantAdmin(savedUser);
+            }
             if (sendEmail) {
                 UserActivationLink activationLink = getActivationLink(tenantId, customerId, savedUser.getId(), request);
                 try {

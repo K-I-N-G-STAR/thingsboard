@@ -45,6 +45,7 @@ import org.thingsboard.server.common.data.cf.CalculatedFieldType;
 import org.thingsboard.server.common.data.cf.configuration.CalculatedFieldConfiguration;
 import org.thingsboard.server.common.data.event.EventType;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.CalculatedFieldId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
@@ -55,6 +56,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.event.EventService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.cf.TbCalculatedFieldService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -85,6 +87,7 @@ public class CalculatedFieldController extends BaseController {
 
     private final TbCalculatedFieldService tbCalculatedFieldService;
     private final EventService eventService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String CALCULATED_FIELD_ID = "calculatedFieldId";
 
@@ -128,6 +131,7 @@ public class CalculatedFieldController extends BaseController {
                                                @RequestBody CalculatedField calculatedField) throws Exception {
         calculatedField.setTenantId(getTenantId());
         checkEntityId(calculatedField.getEntityId(), Operation.WRITE_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_WRITE, calculatedField.getEntityId());
         checkReferencedEntities(calculatedField.getConfiguration());
         return tbCalculatedFieldService.save(calculatedField, getCurrentUser());
     }
@@ -143,6 +147,7 @@ public class CalculatedFieldController extends BaseController {
         CalculatedField calculatedField = tbCalculatedFieldService.findById(calculatedFieldId, getCurrentUser());
         checkNotNull(calculatedField);
         checkEntityId(calculatedField.getEntityId(), Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_READ, calculatedField.getEntityId());
         return calculatedField;
     }
 
@@ -161,6 +166,7 @@ public class CalculatedFieldController extends BaseController {
         checkParameter("entityId", entityIdStr);
         EntityId entityId = EntityIdFactory.getByTypeAndUuid(entityType, entityIdStr);
         checkEntityId(entityId, Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_READ, entityId);
         return checkNotNull(tbCalculatedFieldService.findByTenantIdAndEntityId(getTenantId(), entityId, type, pageLink));
     }
 
@@ -209,6 +215,7 @@ public class CalculatedFieldController extends BaseController {
                                                              @RequestParam MultiValueMap<String, String> params) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         SecurityUser user = getCurrentUser();
+        checkCalculatedFieldReadPermission(user, entityType, entities);
 
         if (CollectionUtils.isEmpty(types)) {
             types = EnumSet.allOf(CalculatedFieldType.class);
@@ -246,6 +253,7 @@ public class CalculatedFieldController extends BaseController {
                                                     @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
                                                     @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, "name", sortOrder);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_READ);
         return calculatedFieldService.findCalculatedFieldNamesByTenantIdAndType(getTenantId(), type, pageLink);
     }
 
@@ -258,7 +266,9 @@ public class CalculatedFieldController extends BaseController {
         checkParameter(CALCULATED_FIELD_ID, strCalculatedFieldId);
         CalculatedFieldId calculatedFieldId = new CalculatedFieldId(toUUID(strCalculatedFieldId));
         CalculatedField calculatedField = tbCalculatedFieldService.findById(calculatedFieldId, getCurrentUser());
+        checkNotNull(calculatedField);
         checkEntityId(calculatedField.getEntityId(), Operation.WRITE_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_DELETE, calculatedField.getEntityId());
         tbCalculatedFieldService.delete(calculatedField, getCurrentUser());
     }
 
@@ -271,7 +281,9 @@ public class CalculatedFieldController extends BaseController {
         checkParameter(CALCULATED_FIELD_ID, strCalculatedFieldId);
         CalculatedFieldId calculatedFieldId = new CalculatedFieldId(toUUID(strCalculatedFieldId));
         CalculatedField calculatedField = tbCalculatedFieldService.findById(calculatedFieldId, getCurrentUser());
+        checkNotNull(calculatedField);
         checkEntityId(calculatedField.getEntityId(), Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_READ, calculatedField.getEntityId());
         TenantId tenantId = getCurrentUser().getTenantId();
         return Optional.ofNullable(eventService.findLatestEvents(tenantId, calculatedFieldId, EventType.DEBUG_CALCULATED_FIELD, 1))
                 .flatMap(events -> events.stream().map(EventInfo::getBody).findFirst())
@@ -286,7 +298,19 @@ public class CalculatedFieldController extends BaseController {
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Test calculated field TBEL expression.")
             @RequestBody JsonNode inputParams) throws ThingsboardException {
         checkParameter("expression", inputParams.has("expression") ? inputParams.get("expression").asText() : null);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.CALCULATED_FIELD_TEST);
         return tbCalculatedFieldService.executeTestScript(getTenantId(), inputParams);
+    }
+
+    private void checkCalculatedFieldReadPermission(SecurityUser user, EntityType entityType, Set<UUID> entities) throws ThingsboardException {
+        if (entityType != null && CollectionUtils.isNotEmpty(entities)) {
+            for (UUID entityId : entities) {
+                factoryAccessService.checkPermission(user, FactoryPermissionCodes.CALCULATED_FIELD_READ,
+                        EntityIdFactory.getByTypeAndUuid(entityType, entityId));
+            }
+        } else {
+            factoryAccessService.checkPermission(user, FactoryPermissionCodes.CALCULATED_FIELD_READ);
+        }
     }
 
 }

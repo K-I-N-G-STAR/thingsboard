@@ -47,6 +47,7 @@ import org.thingsboard.server.common.data.UserEmailInfo;
 import org.thingsboard.server.common.data.alarm.Alarm;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.AlarmId;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DashboardId;
@@ -73,6 +74,7 @@ import org.thingsboard.server.dao.entity.EntityService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.user.TbUserService;
 import org.thingsboard.server.service.query.EntityQueryService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.model.UserPrincipal;
 import org.thingsboard.server.service.security.model.token.JwtTokenFactory;
@@ -129,6 +131,7 @@ public class UserController extends BaseController {
     private final TbUserService tbUserService;
     private final EntityQueryService entityQueryService;
     private final EntityService entityService;
+    private final FactoryAccessService factoryAccessService;
 
     @ApiOperation(value = "Get User (getUserById)",
             notes = "Fetch the User object based on the provided User Id. " +
@@ -143,6 +146,7 @@ public class UserController extends BaseController {
         checkParameter(USER_ID, strUserId);
         UserId userId = new UserId(toUUID(strUserId));
         User user = checkUserId(userId, Operation.READ);
+        checkUserReadPermission(getCurrentUser(), user);
         checkUserInfo(user);
         return user;
     }
@@ -174,6 +178,7 @@ public class UserController extends BaseController {
         UserId userId = new UserId(toUUID(strUserId));
         SecurityUser authUser = getCurrentUser();
         User user = checkUserId(userId, Operation.READ);
+        checkUserPermission(authUser, FactoryPermissionCodes.USER_MANAGE);
         UserPrincipal principal = new UserPrincipal(UserPrincipal.Type.USER_NAME, user.getEmail());
         UserCredentials credentials = userService.findUserCredentialsByUserId(authUser.getTenantId(), userId);
         SecurityUser securityUser = new SecurityUser(user, credentials.isEnabled(), principal);
@@ -195,11 +200,13 @@ public class UserController extends BaseController {
             @RequestBody User user,
             @Parameter(description = "Send activation email (or use activation link)", schema = @Schema(defaultValue = "true"))
             @RequestParam(required = false, defaultValue = "true") boolean sendActivationMail, HttpServletRequest request) throws ThingsboardException {
-        if (!Authority.SYS_ADMIN.equals(getCurrentUser().getAuthority())) {
-            user.setTenantId(getCurrentUser().getTenantId());
+        SecurityUser currentUser = getCurrentUser();
+        if (!Authority.SYS_ADMIN.equals(currentUser.getAuthority())) {
+            user.setTenantId(currentUser.getTenantId());
         }
         checkEntity(user.getId(), user, Resource.USER);
-        return tbUserService.save(getTenantId(), getCurrentUser().getCustomerId(), user, sendActivationMail, request, getCurrentUser());
+        checkUserManagePermission(currentUser, user);
+        return tbUserService.save(getTenantId(), currentUser.getCustomerId(), user, sendActivationMail, request, currentUser);
     }
 
     @ApiOperation(value = "Send or re-send the activation email",
@@ -214,6 +221,7 @@ public class UserController extends BaseController {
         SecurityUser securityUser = getCurrentUser();
         User user = checkNotNull(userService.findUserByEmail(securityUser.getTenantId(), email));
         accessControlService.checkPermission(securityUser, Resource.USER, Operation.READ, user.getId(), user);
+        checkUserPermission(securityUser, FactoryPermissionCodes.USER_MANAGE);
 
         UserActivationLink activationLink = tbUserService.getActivationLink(securityUser.getTenantId(), securityUser.getCustomerId(), user.getId(), request);
         try {
@@ -246,6 +254,7 @@ public class UserController extends BaseController {
         UserId userId = new UserId(toUUID(strUserId));
         checkUserId(userId, Operation.READ);
         SecurityUser securityUser = getCurrentUser();
+        checkUserPermission(securityUser, FactoryPermissionCodes.USER_MANAGE);
         return tbUserService.getActivationLink(securityUser.getTenantId(), securityUser.getCustomerId(), userId, request);
     }
 
@@ -267,7 +276,9 @@ public class UserController extends BaseController {
         if (user.getAuthority() == Authority.TENANT_ADMIN && userService.countTenantAdmins(user.getTenantId()) == 1) {
             throw new ThingsboardException("At least one tenant administrator must remain!", ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
-        tbUserService.delete(getTenantId(), getCurrentUser().getCustomerId(), user, getCurrentUser());
+        SecurityUser currentUser = getCurrentUser();
+        checkUserPermission(currentUser, FactoryPermissionCodes.USER_MANAGE);
+        tbUserService.delete(getTenantId(), currentUser.getCustomerId(), user, currentUser);
     }
 
     @ApiOperation(value = "Get Users (getUsers)",
@@ -288,11 +299,14 @@ public class UserController extends BaseController {
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         SecurityUser currentUser = getCurrentUser();
+        checkUserPermission(currentUser, FactoryPermissionCodes.USER_READ);
+        PageData<User> result;
         if (Authority.TENANT_ADMIN.equals(currentUser.getAuthority())) {
-            return checkNotNull(userService.findUsersByTenantId(currentUser.getTenantId(), pageLink));
+            result = checkNotNull(userService.findUsersByTenantId(currentUser.getTenantId(), pageLink));
         } else {
-            return checkNotNull(userService.findCustomerUsers(currentUser.getTenantId(), currentUser.getCustomerId(), pageLink));
+            result = checkNotNull(userService.findCustomerUsers(currentUser.getTenantId(), currentUser.getCustomerId(), pageLink));
         }
+        return filterUserPage(result);
     }
 
     @ApiOperation(value = "Find users by query (findUsersByQuery)",
@@ -312,6 +326,7 @@ public class UserController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         SecurityUser securityUser = getCurrentUser();
+        checkUserPermission(securityUser, FactoryPermissionCodes.USER_READ);
 
         EntityTypeFilter entityFilter = new EntityTypeFilter();
         entityFilter.setEntityType(EntityType.USER);
@@ -351,8 +366,9 @@ public class UserController extends BaseController {
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         checkParameter("tenantId", strTenantId);
         TenantId tenantId = TenantId.fromUUID(toUUID(strTenantId));
+        checkUserPermission(getCurrentUser(), FactoryPermissionCodes.USER_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
-        return checkNotNull(userService.findTenantAdmins(tenantId, pageLink));
+        return filterUserPage(checkNotNull(userService.findTenantAdmins(tenantId, pageLink)));
     }
 
     @ApiOperation(value = "Get Customer Users (getCustomerUsers)",
@@ -375,9 +391,10 @@ public class UserController extends BaseController {
         checkParameter("customerId", strCustomerId);
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         checkCustomerId(customerId, Operation.READ);
+        checkUserPermission(getCurrentUser(), FactoryPermissionCodes.USER_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         TenantId tenantId = getCurrentUser().getTenantId();
-        return checkNotNull(userService.findCustomerUsers(tenantId, customerId, pageLink));
+        return filterUserPage(checkNotNull(userService.findCustomerUsers(tenantId, customerId, pageLink)));
     }
 
     @ApiOperation(value = "Enable/Disable User credentials (setUserCredentialsEnabled)",
@@ -392,7 +409,9 @@ public class UserController extends BaseController {
         checkParameter(USER_ID, strUserId);
         UserId userId = new UserId(toUUID(strUserId));
         checkUserId(userId, Operation.WRITE);
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser currentUser = getCurrentUser();
+        checkUserPermission(currentUser, FactoryPermissionCodes.USER_MANAGE);
+        TenantId tenantId = currentUser.getTenantId();
         userService.setUserCredentialsEnabled(tenantId, userId, userCredentialsEnabled);
 
         if (!userCredentialsEnabled) {
@@ -423,6 +442,7 @@ public class UserController extends BaseController {
         AlarmId alarmEntityId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmEntityId, Operation.READ);
         SecurityUser currentUser = getCurrentUser();
+        checkUserPermission(currentUser, FactoryPermissionCodes.USER_READ);
         TenantId tenantId = currentUser.getTenantId();
         CustomerId originatorCustomerId = entityService.fetchEntityCustomerId(tenantId, alarm.getOriginator()).orElse(NULL_CUSTOMER_ID);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
@@ -440,7 +460,7 @@ public class UserController extends BaseController {
         } else {
             pageData = userService.findCustomerUsers(tenantId, alarm.getCustomerId(), pageLink);
         }
-        return pageData.mapData(user -> new UserEmailInfo(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName()));
+        return filterUserPage(pageData).mapData(user -> new UserEmailInfo(user.getId(), user.getEmail(), user.getFirstName(), user.getLastName()));
     }
 
     @ApiOperation(value = "Save user settings (saveUserSettings)",
@@ -610,7 +630,9 @@ public class UserController extends BaseController {
     @GetMapping(value = "/users", params = {"userIds"})
     public List<User> getUsersByIdsV1(
             @RequestParam("userIds") Set<UUID> userUUIDs) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser currentUser = getCurrentUser();
+        checkUserPermission(currentUser, FactoryPermissionCodes.USER_READ);
+        TenantId tenantId = currentUser.getTenantId();
         List<UserId> userIds = new ArrayList<>();
         for (UUID userUUID : userUUIDs) {
             userIds.add(new UserId(userUUID));
@@ -629,10 +651,37 @@ public class UserController extends BaseController {
         return getUsersByIdsV1(userUUIDs);
     }
 
-    private List<User> filterUsersByReadPermission(List<User> users) {
+    private void checkUserPermission(SecurityUser user, String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode);
+    }
+
+    private void checkUserReadPermission(SecurityUser currentUser, User user) throws ThingsboardException {
+        if (!currentUser.getId().equals(user.getId())) {
+            checkUserPermission(currentUser, FactoryPermissionCodes.USER_READ);
+        }
+    }
+
+    private void checkUserManagePermission(SecurityUser currentUser, User user) throws ThingsboardException {
+        if (user.getId() == null || !currentUser.getId().equals(user.getId())) {
+            checkUserPermission(currentUser, FactoryPermissionCodes.USER_MANAGE);
+        }
+    }
+
+    private boolean hasUserPermission(SecurityUser user, String permissionCode) {
+        return factoryAccessService.hasPermission(user, permissionCode);
+    }
+
+    private PageData<User> filterUserPage(PageData<User> pageData) throws ThingsboardException {
+        List<User> data = filterUsersByReadPermission(pageData.getData());
+        return new PageData<>(data, pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
+    }
+
+    private List<User> filterUsersByReadPermission(List<User> users) throws ThingsboardException {
+        SecurityUser currentUser = getCurrentUser();
         return users.stream().filter(user -> {
             try {
-                return accessControlService.hasPermission(getCurrentUser(), Resource.USER, Operation.READ, user.getId(), user);
+                return accessControlService.hasPermission(currentUser, Resource.USER, Operation.READ, user.getId(), user)
+                        && hasUserPermission(currentUser, FactoryPermissionCodes.USER_READ);
             } catch (ThingsboardException e) {
                 return false;
             }

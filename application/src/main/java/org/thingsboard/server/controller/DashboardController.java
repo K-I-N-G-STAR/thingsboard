@@ -49,6 +49,7 @@ import org.thingsboard.server.common.data.Tenant;
 import org.thingsboard.server.common.data.User;
 import org.thingsboard.server.common.data.edge.Edge;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.DashboardId;
 import org.thingsboard.server.common.data.id.EdgeId;
@@ -59,6 +60,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.dashboard.TbDashboardService;
 import org.thingsboard.server.service.resource.TbResourceService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
@@ -103,6 +105,7 @@ public class DashboardController extends BaseController {
 
     private final TbDashboardService tbDashboardService;
     private final TbResourceService tbResourceService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String DASHBOARD_ID = "dashboardId";
     private static final String HOME_DASHBOARD_ID = "homeDashboardId";
@@ -145,7 +148,9 @@ public class DashboardController extends BaseController {
             @PathVariable(DASHBOARD_ID) String strDashboardId) throws ThingsboardException {
         checkParameter(DASHBOARD_ID, strDashboardId);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
-        return checkDashboardInfoId(dashboardId, Operation.READ);
+        DashboardInfo dashboardInfo = checkDashboardInfoId(dashboardId, Operation.READ);
+        checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ, dashboardInfo.getId());
+        return dashboardInfo;
     }
 
     @ApiOperation(value = "Get Dashboard (getDashboardById)",
@@ -164,6 +169,7 @@ public class DashboardController extends BaseController {
         checkParameter(DASHBOARD_ID, strDashboardId);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.READ);
+        checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ, dashboard.getId());
         if (includeResources) {
             dashboard.setResources(tbResourceService.exportResources(dashboard, getCurrentUser()));
         }
@@ -186,9 +192,15 @@ public class DashboardController extends BaseController {
                               @RequestBody Dashboard dashboard,
                               @RequestHeader(name = HttpHeaders.ACCEPT_ENCODING, required = false) String acceptEncodingHeader,
                               HttpServletResponse response) throws Exception {
-        dashboard.setTenantId(getTenantId());
+        SecurityUser user = getCurrentUser();
+        dashboard.setTenantId(user.getTenantId());
         checkEntity(dashboard.getId(), dashboard, Resource.DASHBOARD);
-        var savedDashboard = tbDashboardService.save(dashboard, getCurrentUser());
+        if (dashboard.getId() != null) {
+            checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_WRITE, dashboard.getId());
+        } else {
+            checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_WRITE);
+        }
+        var savedDashboard = tbDashboardService.save(dashboard, user);
         response.setContentType(APPLICATION_JSON_VALUE);
         compressResponseWithGzipIFAccepted(acceptEncodingHeader, response, JacksonUtil.writeValueAsBytes(savedDashboard));
     }
@@ -202,7 +214,9 @@ public class DashboardController extends BaseController {
         checkParameter(DASHBOARD_ID, strDashboardId);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.DELETE);
-        tbDashboardService.delete(dashboard, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_DELETE, dashboard.getId());
+        tbDashboardService.delete(dashboard, user);
     }
 
     @ApiOperation(value = "Assign the Dashboard (assignDashboardToCustomer)",
@@ -223,7 +237,9 @@ public class DashboardController extends BaseController {
 
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.ASSIGN_TO_CUSTOMER);
-        return tbDashboardService.assignDashboardToCustomer(dashboard, customer, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.assignDashboardToCustomer(dashboard, customer, user);
     }
 
     @ApiOperation(value = "Unassign the Dashboard (unassignDashboardFromCustomer)",
@@ -242,7 +258,9 @@ public class DashboardController extends BaseController {
         Customer customer = checkCustomerId(customerId, Operation.READ);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.UNASSIGN_FROM_CUSTOMER);
-        return tbDashboardService.unassignDashboardFromCustomer(dashboard, customer, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.unassignDashboardFromCustomer(dashboard, customer, user);
     }
 
     @ApiOperation(value = "Update the Dashboard Customers (updateDashboardCustomers)",
@@ -260,7 +278,9 @@ public class DashboardController extends BaseController {
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.ASSIGN_TO_CUSTOMER);
         Set<CustomerId> customerIds = customerIdFromStr(strCustomerIds);
-        return tbDashboardService.updateDashboardCustomers(dashboard, customerIds, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.updateDashboardCustomers(dashboard, customerIds, user);
     }
 
     @ApiOperation(value = "Adds the Dashboard Customers (addDashboardCustomers)",
@@ -277,7 +297,9 @@ public class DashboardController extends BaseController {
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.ASSIGN_TO_CUSTOMER);
         Set<CustomerId> customerIds = customerIdFromStr(strCustomerIds);
-        return tbDashboardService.addDashboardCustomers(dashboard, customerIds, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.addDashboardCustomers(dashboard, customerIds, user);
     }
 
     @ApiOperation(value = "Remove the Dashboard Customers (removeDashboardCustomers)",
@@ -294,7 +316,9 @@ public class DashboardController extends BaseController {
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.UNASSIGN_FROM_CUSTOMER);
         Set<CustomerId> customerIds = customerIdFromStr(strCustomerIds);
-        return tbDashboardService.removeDashboardCustomers(dashboard, customerIds, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.removeDashboardCustomers(dashboard, customerIds, user);
     }
 
     @ApiOperation(value = "Assign the Dashboard to Public Customer (assignDashboardToPublicCustomer)",
@@ -312,7 +336,9 @@ public class DashboardController extends BaseController {
         checkParameter(DASHBOARD_ID, strDashboardId);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.ASSIGN_TO_CUSTOMER);
-        return tbDashboardService.assignDashboardToPublicCustomer(dashboard, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.assignDashboardToPublicCustomer(dashboard, user);
     }
 
     @ApiOperation(value = "Unassign the Dashboard from Public Customer (unassignDashboardFromPublicCustomer)",
@@ -326,7 +352,9 @@ public class DashboardController extends BaseController {
         checkParameter(DASHBOARD_ID, strDashboardId);
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.UNASSIGN_FROM_CUSTOMER);
-        return tbDashboardService.unassignDashboardFromPublicCustomer(dashboard, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.unassignDashboardFromPublicCustomer(dashboard, user);
     }
 
     @ApiOperation(value = "Get Tenant Dashboards by System Administrator (getTenantDashboardsByTenantId)",
@@ -349,8 +377,11 @@ public class DashboardController extends BaseController {
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         TenantId tenantId = TenantId.fromUUID(toUUID(strTenantId));
         checkTenantId(tenantId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
-        return checkNotNull(dashboardService.findDashboardsByTenantId(tenantId, pageLink));
+        PageData<DashboardInfo> result = checkNotNull(dashboardService.findDashboardsByTenantId(tenantId, pageLink));
+        return filterDashboardInfoPage(result);
     }
 
     @ApiOperation(value = "Get Tenant Dashboards (getTenantDashboards)",
@@ -372,12 +403,15 @@ public class DashboardController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         TenantId tenantId = getCurrentUser().getTenantId();
+        checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<DashboardInfo> result;
         if (mobile != null && mobile) {
-            return checkNotNull(dashboardService.findMobileDashboardsByTenantId(tenantId, pageLink));
+            result = checkNotNull(dashboardService.findMobileDashboardsByTenantId(tenantId, pageLink));
         } else {
-            return checkNotNull(dashboardService.findDashboardsByTenantId(tenantId, pageLink));
+            result = checkNotNull(dashboardService.findDashboardsByTenantId(tenantId, pageLink));
         }
+        return filterDashboardInfoPage(result);
     }
 
     @ApiOperation(value = "Get Customer Dashboards (getCustomerDashboards)",
@@ -404,12 +438,15 @@ public class DashboardController extends BaseController {
         TenantId tenantId = getCurrentUser().getTenantId();
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         checkCustomerId(customerId, Operation.READ);
+        checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<DashboardInfo> result;
         if (mobile != null && mobile) {
-            return checkNotNull(dashboardService.findMobileDashboardsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
+            result = checkNotNull(dashboardService.findMobileDashboardsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
         } else {
-            return checkNotNull(dashboardService.findDashboardsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
+            result = checkNotNull(dashboardService.findDashboardsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
         }
+        return filterDashboardInfoPage(result);
     }
 
     @ApiOperation(value = "Get Home Dashboard (getHomeDashboard)",
@@ -463,7 +500,9 @@ public class DashboardController extends BaseController {
         }
         User user = userService.findUserById(securityUser.getTenantId(), securityUser.getId());
         JsonNode additionalInfo = user.getAdditionalInfo();
-        return getHomeDashboardInfo(securityUser, additionalInfo);
+        HomeDashboardInfo homeDashboardInfo = getHomeDashboardInfo(securityUser, additionalInfo);
+        checkHomeDashboardReadPermission(securityUser, homeDashboardInfo);
+        return homeDashboardInfo;
     }
 
     @ApiOperation(value = "Get Tenant Home Dashboard Info (getTenantHomeDashboardInfo)",
@@ -483,6 +522,9 @@ public class DashboardController extends BaseController {
                 hideDashboardToolbar = additionalInfo.get(HOME_DASHBOARD_HIDE_TOOLBAR).asBoolean();
             }
         }
+        if (dashboardId != null) {
+            checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ, dashboardId);
+        }
         return new HomeDashboardInfo(dashboardId, hideDashboardToolbar);
     }
 
@@ -498,6 +540,9 @@ public class DashboardController extends BaseController {
 
         if (homeDashboardInfo.getDashboardId() != null) {
             checkDashboardId(homeDashboardInfo.getDashboardId(), Operation.READ);
+            checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_ASSIGN, homeDashboardInfo.getDashboardId());
+        } else {
+            checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_ASSIGN);
         }
         Tenant tenant = tenantService.findTenantById(getTenantId());
         JsonNode additionalInfo = tenant.getAdditionalInfo();
@@ -521,6 +566,7 @@ public class DashboardController extends BaseController {
                 String strDashboardId = additionalInfo.get(HOME_DASHBOARD_ID).asText();
                 DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
                 Dashboard dashboard = checkDashboardId(dashboardId, Operation.READ);
+                checkDashboardPermission(getCurrentUser(), FactoryPermissionCodes.DASHBOARD_READ, dashboard.getId());
                 boolean hideDashboardToolbar = true;
                 if (additionalInfo.has(HOME_DASHBOARD_HIDE_TOOLBAR)) {
                     hideDashboardToolbar = additionalInfo.get(HOME_DASHBOARD_HIDE_TOOLBAR).asBoolean();
@@ -549,8 +595,10 @@ public class DashboardController extends BaseController {
         Edge edge = checkEdgeId(edgeId, Operation.READ);
 
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
-        checkDashboardId(dashboardId, Operation.READ);
-        return tbDashboardService.asignDashboardToEdge(getTenantId(), dashboardId, edge, getCurrentUser());
+        Dashboard dashboard = checkDashboardId(dashboardId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
+        return tbDashboardService.asignDashboardToEdge(getTenantId(), dashboardId, edge, user);
     }
 
     @ApiOperation(value = "Unassign dashboard from edge (unassignDashboardFromEdge)",
@@ -572,8 +620,10 @@ public class DashboardController extends BaseController {
 
         DashboardId dashboardId = new DashboardId(toUUID(strDashboardId));
         Dashboard dashboard = checkDashboardId(dashboardId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_ASSIGN, dashboard.getId());
 
-        return tbDashboardService.unassignDashboardFromEdge(dashboard, edge, getCurrentUser());
+        return tbDashboardService.unassignDashboardFromEdge(dashboard, edge, user);
     }
 
     @ApiOperation(value = "Get Edge Dashboards (getEdgeDashboards)",
@@ -641,10 +691,40 @@ public class DashboardController extends BaseController {
         return customerIds;
     }
 
-    private List<DashboardInfo> filterDashboardsByReadPermission(List<DashboardInfo> dashboards) {
+    private void checkDashboardPermission(SecurityUser user, String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode);
+    }
+
+    private void checkDashboardPermission(SecurityUser user, String permissionCode, DashboardId dashboardId) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode, dashboardId);
+    }
+
+    private void checkHomeDashboardReadPermission(SecurityUser user, HomeDashboardInfo homeDashboardInfo) throws ThingsboardException {
+        if (homeDashboardInfo != null && homeDashboardInfo.getDashboardId() != null) {
+            checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_READ, homeDashboardInfo.getDashboardId());
+        }
+    }
+
+    private boolean hasDashboardPermission(SecurityUser user, DashboardId dashboardId) {
+        try {
+            checkDashboardPermission(user, FactoryPermissionCodes.DASHBOARD_READ, dashboardId);
+            return true;
+        } catch (ThingsboardException e) {
+            return false;
+        }
+    }
+
+    private PageData<DashboardInfo> filterDashboardInfoPage(PageData<DashboardInfo> pageData) throws ThingsboardException {
+        List<DashboardInfo> filteredDashboards = filterDashboardsByReadPermission(pageData.getData());
+        return new PageData<>(filteredDashboards, pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
+    }
+
+    private List<DashboardInfo> filterDashboardsByReadPermission(List<DashboardInfo> dashboards) throws ThingsboardException {
+        SecurityUser user = getCurrentUser();
         return dashboards.stream().filter(dashboard -> {
             try {
-                return accessControlService.hasPermission(getCurrentUser(), Resource.DASHBOARD, Operation.READ, dashboard.getId(), dashboard);
+                return accessControlService.hasPermission(user, Resource.DASHBOARD, Operation.READ, dashboard.getId(), dashboard)
+                        && hasDashboardPermission(user, dashboard.getId());
             } catch (ThingsboardException e) {
                 return false;
             }

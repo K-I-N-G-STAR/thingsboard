@@ -41,6 +41,7 @@ import org.thingsboard.server.common.data.alarm.AlarmSeverity;
 import org.thingsboard.server.common.data.alarm.AlarmStatus;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.AlarmId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
@@ -51,6 +52,8 @@ import org.thingsboard.server.common.data.page.TimePageLink;
 import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.alarm.TbAlarmService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
+import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
 
@@ -83,6 +86,7 @@ import static org.thingsboard.server.controller.ControllerConstants.UUID_WIKI_LI
 public class AlarmController extends BaseController {
 
     private final TbAlarmService tbAlarmService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String ALARM_ID = "alarmId";
     private static final String ALARM_SECURITY_CHECK = "If the user has the authority of 'Tenant Administrator', the server checks that the originator of alarm is owned by the same tenant. " +
@@ -109,7 +113,9 @@ public class AlarmController extends BaseController {
                               @PathVariable(ALARM_ID) String strAlarmId) throws ThingsboardException {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
-        return checkAlarmId(alarmId, Operation.READ);
+        Alarm alarm = checkAlarmId(alarmId, Operation.READ);
+        checkAlarmPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_READ, alarm.getOriginator());
+        return alarm;
     }
 
     @ApiOperation(value = "Get Alarm Info (getAlarmInfoById)",
@@ -121,7 +127,9 @@ public class AlarmController extends BaseController {
                                       @PathVariable(ALARM_ID) String strAlarmId) throws ThingsboardException {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
-        return checkAlarmInfoId(alarmId, Operation.READ);
+        AlarmInfo alarmInfo = checkAlarmInfoId(alarmId, Operation.READ);
+        checkAlarmPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_READ, alarmInfo.getOriginator());
+        return alarmInfo;
     }
 
     @ApiOperation(value = "Create or Update Alarm (saveAlarm)",
@@ -138,14 +146,16 @@ public class AlarmController extends BaseController {
     @PreAuthorize("hasAnyAuthority('TENANT_ADMIN', 'CUSTOMER_USER')")
     @PostMapping(value = "/alarm")
     public Alarm saveAlarm(@io.swagger.v3.oas.annotations.parameters.RequestBody(description = "A JSON value representing the alarm.") @RequestBody Alarm alarm) throws ThingsboardException {
-        alarm.setTenantId(getTenantId());
+        SecurityUser user = getCurrentUser();
+        alarm.setTenantId(user.getTenantId());
         checkNotNull(alarm.getOriginator());
         checkEntity(alarm.getId(), alarm, Resource.ALARM);
         checkEntityId(alarm.getOriginator(), Operation.READ);
         if (alarm.getAssigneeId() != null) {
             checkUserId(alarm.getAssigneeId(), Operation.READ);
         }
-        return tbAlarmService.save(alarm, getCurrentUser());
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_WRITE, alarm.getOriginator());
+        return tbAlarmService.save(alarm, user);
     }
 
     @ApiOperation(value = "Delete Alarm (deleteAlarm)",
@@ -156,7 +166,9 @@ public class AlarmController extends BaseController {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmId, Operation.DELETE);
-        return tbAlarmService.delete(alarm, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_DELETE, alarm.getOriginator());
+        return tbAlarmService.delete(alarm, user);
     }
 
     @ApiOperation(value = "Acknowledge Alarm (ackAlarm)",
@@ -170,8 +182,10 @@ public class AlarmController extends BaseController {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmId, Operation.WRITE);
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_ACK, alarm.getOriginator());
         //TODO: return correct error code if the alarm is not found or already cleared
-        return tbAlarmService.ack(alarm, getCurrentUser());
+        return tbAlarmService.ack(alarm, user);
     }
 
     @ApiOperation(value = "Clear Alarm (clearAlarm)",
@@ -185,8 +199,10 @@ public class AlarmController extends BaseController {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmId, Operation.WRITE);
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_CLEAR, alarm.getOriginator());
         //TODO: return correct error code if the alarm is not found or already cleared
-        return tbAlarmService.clear(alarm, getCurrentUser());
+        return tbAlarmService.clear(alarm, user);
     }
 
     @ApiOperation(value = "Assign/Reassign Alarm (assignAlarm)",
@@ -208,7 +224,9 @@ public class AlarmController extends BaseController {
         Alarm alarm = checkAlarmId(alarmId, Operation.WRITE);
         UserId assigneeId = new UserId(UUID.fromString(strAssigneeId));
         checkUserId(assigneeId, Operation.READ);
-        return tbAlarmService.assign(alarm, assigneeId, System.currentTimeMillis(), getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_ASSIGN, alarm.getOriginator());
+        return tbAlarmService.assign(alarm, assigneeId, System.currentTimeMillis(), user);
     }
 
     @ApiOperation(value = "Unassign Alarm (unassignAlarm)",
@@ -224,7 +242,9 @@ public class AlarmController extends BaseController {
         checkParameter(ALARM_ID, strAlarmId);
         AlarmId alarmId = new AlarmId(toUUID(strAlarmId));
         Alarm alarm = checkAlarmId(alarmId, Operation.WRITE);
-        return tbAlarmService.unassign(alarm, System.currentTimeMillis(), getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_ASSIGN, alarm.getOriginator());
+        return tbAlarmService.unassign(alarm, System.currentTimeMillis(), user);
     }
 
     @ApiOperation(value = "Get Alarms (getAlarmsByEntity)",
@@ -270,13 +290,15 @@ public class AlarmController extends BaseController {
                     "and 'status' can't be specified at the same time!", ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
         checkEntityId(entityId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ, entityId);
         UserId assigneeUserId = null;
         if (assigneeId != null) {
             assigneeUserId = new UserId(UUID.fromString(assigneeId));
         }
         TimePageLink pageLink = createTimePageLink(pageSize, page, textSearch, sortProperty, sortOrder, startTime, endTime);
 
-        return checkNotNull(alarmService.findAlarms(getCurrentUser().getTenantId(), new AlarmQuery(entityId, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
+        return checkNotNull(alarmService.findAlarms(user.getTenantId(), new AlarmQuery(entityId, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
     }
 
     @ApiOperation(value = "Get All Alarms (getAllAlarms)",
@@ -323,11 +345,15 @@ public class AlarmController extends BaseController {
         }
         TimePageLink pageLink = createTimePageLink(pageSize, page, textSearch, sortProperty, sortOrder, startTime, endTime);
 
-        if (getCurrentUser().isCustomerUser()) {
-            return checkNotNull(alarmService.findCustomerAlarms(getCurrentUser().getTenantId(), getCurrentUser().getCustomerId(), new AlarmQuery(null, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ);
+        PageData<AlarmInfo> result;
+        if (user.isCustomerUser()) {
+            result = checkNotNull(alarmService.findCustomerAlarms(user.getTenantId(), user.getCustomerId(), new AlarmQuery(null, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
         } else {
-            return checkNotNull(alarmService.findAlarms(getCurrentUser().getTenantId(), new AlarmQuery(null, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
+            result = checkNotNull(alarmService.findAlarms(user.getTenantId(), new AlarmQuery(null, pageLink, alarmSearchStatus, alarmStatus, assigneeUserId, fetchOriginator)));
         }
+        return filterAlarmInfoPage(user, result);
     }
 
     @ApiOperation(value = "Get Alarms (getAlarmsV2)",
@@ -367,6 +393,8 @@ public class AlarmController extends BaseController {
         checkParameter("EntityType", strEntityType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strEntityType, strEntityId);
         checkEntityId(entityId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ, entityId);
         List<AlarmSearchStatus> alarmStatusList = new ArrayList<>();
         if (statusList != null) {
             for (String strStatus : statusList) {
@@ -390,7 +418,7 @@ public class AlarmController extends BaseController {
         }
         TimePageLink pageLink = createTimePageLink(pageSize, page, textSearch, sortProperty, sortOrder, startTime, endTime);
 
-        return checkNotNull(alarmService.findAlarmsV2(getCurrentUser().getTenantId(), new AlarmQueryV2(entityId, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
+        return checkNotNull(alarmService.findAlarmsV2(user.getTenantId(), new AlarmQueryV2(entityId, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
     }
 
     @ApiOperation(value = "Get All Alarms (getAllAlarmsV2)",
@@ -447,11 +475,15 @@ public class AlarmController extends BaseController {
         }
         TimePageLink pageLink = createTimePageLink(pageSize, page, textSearch, sortProperty, sortOrder, startTime, endTime);
 
-        if (getCurrentUser().isCustomerUser()) {
-            return checkNotNull(alarmService.findCustomerAlarmsV2(getCurrentUser().getTenantId(), getCurrentUser().getCustomerId(), new AlarmQueryV2(null, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ);
+        PageData<AlarmInfo> result;
+        if (user.isCustomerUser()) {
+            result = checkNotNull(alarmService.findCustomerAlarmsV2(user.getTenantId(), user.getCustomerId(), new AlarmQueryV2(null, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
         } else {
-            return checkNotNull(alarmService.findAlarmsV2(getCurrentUser().getTenantId(), new AlarmQueryV2(null, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
+            result = checkNotNull(alarmService.findAlarmsV2(user.getTenantId(), new AlarmQueryV2(null, pageLink, alarmTypeList, alarmStatusList, alarmSeverityList, assigneeUserId)));
         }
+        return filterAlarmInfoPage(user, result);
     }
 
     @ApiOperation(value = "Get Highest Alarm Severity (getHighestAlarmSeverity)",
@@ -481,7 +513,9 @@ public class AlarmController extends BaseController {
                     "and 'status' can't be specified at the same time!", ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
         checkEntityId(entityId, Operation.READ);
-        return alarmService.findHighestAlarmSeverity(getCurrentUser().getTenantId(), entityId, alarmSearchStatus,
+        SecurityUser user = getCurrentUser();
+        checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ, entityId);
+        return alarmService.findHighestAlarmSeverity(user.getTenantId(), entityId, alarmSearchStatus,
                 alarmStatus, assigneeId);
     }
 
@@ -497,8 +531,33 @@ public class AlarmController extends BaseController {
                                                  @RequestParam(required = false) String textSearch,
                                                  @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
                                                  @RequestParam(required = false) String sortOrder) throws ThingsboardException {
+        checkAlarmPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, "type", sortOrder);
         return checkNotNull(alarmService.findAlarmTypesByTenantId(getTenantId(), pageLink));
+    }
+
+    private void checkAlarmPermission(SecurityUser user, String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode);
+    }
+
+    private void checkAlarmPermission(SecurityUser user, String permissionCode, EntityId originator) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode, originator);
+    }
+
+    private boolean hasAlarmPermission(SecurityUser user, EntityId originator) {
+        try {
+            checkAlarmPermission(user, FactoryPermissionCodes.ALARM_READ, originator);
+            return true;
+        } catch (ThingsboardException e) {
+            return false;
+        }
+    }
+
+    private PageData<AlarmInfo> filterAlarmInfoPage(SecurityUser user, PageData<AlarmInfo> pageData) {
+        List<AlarmInfo> data = pageData.getData().stream()
+                .filter(alarm -> alarm.getOriginator() != null && hasAlarmPermission(user, alarm.getOriginator()))
+                .toList();
+        return new PageData<>(data, pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
     }
 
 }

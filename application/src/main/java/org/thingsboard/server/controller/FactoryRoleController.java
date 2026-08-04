@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
 import org.thingsboard.server.common.data.audit.ActionType;
 import org.thingsboard.server.common.data.factory.FactoryPermission;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.factory.FactoryRole;
 import org.thingsboard.server.common.data.factory.FactoryRoleScope;
 import org.thingsboard.server.common.data.factory.FactorySubjectRole;
@@ -89,7 +90,8 @@ public class FactoryRoleController extends BaseController {
             notes = "Returns enabled factory permission dictionary. " + TENANT_AUTHORITY_PARAGRAPH)
     @PreAuthorize("hasAuthority('TENANT_ADMIN')")
     @GetMapping("/permissions")
-    public List<FactoryPermission> getPermissions() {
+    public List<FactoryPermission> getPermissions() throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ROLE_READ);
         return factoryPermissionService.findEnabledPermissions();
     }
 
@@ -107,6 +109,7 @@ public class FactoryRoleController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ROLE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return factoryPermissionService.findPermissions(pageLink);
     }
@@ -117,7 +120,7 @@ public class FactoryRoleController extends BaseController {
     @PostMapping("/permissions")
     public FactoryPermission savePermission(@RequestBody @Valid FactoryPermission permission) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "permission:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.PERMISSION_MANAGE);
         ActionType actionType = permission.getId() == null ? ActionType.ADDED : ActionType.UPDATED;
         FactoryPermission savedPermission = factoryPermissionService.savePermission(permission);
         logEntityActionService.logEntityAction(user.getTenantId(), savedPermission.getId(), savedPermission, actionType, user);
@@ -131,7 +134,7 @@ public class FactoryRoleController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     public void deletePermission(@PathVariable UUID permissionId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "permission:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.PERMISSION_MANAGE);
         FactoryPermissionId factoryPermissionId = new FactoryPermissionId(permissionId);
         FactoryPermission permission = checkNotNull(factoryPermissionService.findPermissionById(factoryPermissionId));
         factoryPermissionService.deletePermission(factoryPermissionId);
@@ -144,6 +147,7 @@ public class FactoryRoleController extends BaseController {
     @GetMapping("/roles/{roleId}")
     public FactoryRole getRoleById(@PathVariable UUID roleId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         return checkNotNull(factoryRoleService.findRoleById(user.getTenantId(), new FactoryRoleId(roleId)));
     }
 
@@ -162,6 +166,7 @@ public class FactoryRoleController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return factoryRoleService.findRoles(user.getTenantId(), pageLink);
     }
@@ -172,7 +177,7 @@ public class FactoryRoleController extends BaseController {
     @PostMapping("/roles")
     public FactoryRole saveRole(@RequestBody @Valid FactoryRole role) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         ActionType actionType = role.getId() == null ? ActionType.ADDED : ActionType.UPDATED;
         role.setTenantId(user.getTenantId());
         FactoryRole savedRole = factoryRoleService.saveRole(user.getTenantId(), role);
@@ -187,7 +192,7 @@ public class FactoryRoleController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     public void deleteRole(@PathVariable UUID roleId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         FactoryRole role = checkNotNull(factoryRoleService.findRoleById(user.getTenantId(), factoryRoleId));
         factoryRoleService.deleteRole(user.getTenantId(), factoryRoleId);
@@ -200,6 +205,7 @@ public class FactoryRoleController extends BaseController {
     @GetMapping("/roles/{roleId}/permissions")
     public List<String> getRolePermissionCodes(@PathVariable UUID roleId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         return factoryRoleService.findRolePermissionCodes(user.getTenantId(), factoryRoleId);
@@ -212,7 +218,7 @@ public class FactoryRoleController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     public void saveRolePermissions(@PathVariable UUID roleId, @RequestBody List<String> permissionCodes) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         factoryRoleService.saveRolePermissions(user.getTenantId(), factoryRoleId, permissionCodes);
@@ -235,6 +241,7 @@ public class FactoryRoleController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
@@ -248,7 +255,7 @@ public class FactoryRoleController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     public void assignSubjects(@PathVariable UUID roleId, @RequestBody List<FactorySubjectRole> subjects) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         if (subjects != null) {
@@ -267,7 +274,7 @@ public class FactoryRoleController extends BaseController {
                                  @PathVariable FactorySubjectType subjectType,
                                  @RequestBody List<UUID> subjectIds) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         factoryRoleService.unassignSubjects(user.getTenantId(), factoryRoleId, subjectType, subjectIds);
@@ -280,6 +287,7 @@ public class FactoryRoleController extends BaseController {
     @GetMapping("/roles/{roleId}/scopes")
     public List<FactoryRoleScope> getRoleScopes(@PathVariable UUID roleId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         return factoryRoleService.findRoleScopes(user.getTenantId(), factoryRoleId);
@@ -292,7 +300,7 @@ public class FactoryRoleController extends BaseController {
     @ResponseStatus(HttpStatus.OK)
     public void saveRoleScopes(@PathVariable UUID roleId, @RequestBody List<FactoryRoleScope> scopes) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         FactoryRoleId factoryRoleId = new FactoryRoleId(roleId);
         checkFactoryRole(user, factoryRoleId);
         factoryRoleService.saveRoleScopes(user.getTenantId(), factoryRoleId, scopes);
@@ -306,6 +314,7 @@ public class FactoryRoleController extends BaseController {
     public List<FactorySubjectRole> getSubjectRoles(@PathVariable FactorySubjectType subjectType,
                                                     @PathVariable UUID subjectId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         return factoryRoleService.findSubjectRoles(user.getTenantId(), subjectType, subjectId);
     }
 
@@ -316,6 +325,7 @@ public class FactoryRoleController extends BaseController {
     public List<FactoryRoleScope> getSubjectScopes(@PathVariable FactorySubjectType subjectType,
                                                    @PathVariable UUID subjectId) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_READ);
         return factoryRoleService.findSubjectScopes(user.getTenantId(), subjectType, subjectId);
     }
 
@@ -328,7 +338,7 @@ public class FactoryRoleController extends BaseController {
                                   @PathVariable UUID subjectId,
                                   @RequestBody List<FactoryRoleScope> scopes) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
-        factoryAccessService.checkPermission(user, "role:manage");
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.ROLE_MANAGE);
         factoryRoleService.saveSubjectScopes(user.getTenantId(), subjectType, subjectId, scopes);
         logSubjectScopesUpdated(user, subjectType, subjectId);
     }

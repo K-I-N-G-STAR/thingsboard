@@ -27,6 +27,7 @@ import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.AbstractTbEntityService;
 import org.thingsboard.server.service.entitiy.queue.TbQueueService;
 import org.thingsboard.server.service.install.InstallScripts;
+import org.thingsboard.server.service.security.factory.FactoryRoleBootstrapService;
 import org.thingsboard.server.service.sync.vc.EntitiesVersionControlService;
 
 import java.util.Collections;
@@ -43,6 +44,7 @@ public class DefaultTbTenantService extends AbstractTbEntityService implements T
     private final TbQueueService tbQueueService;
     private final TenantProfileService tenantProfileService;
     private final EntitiesVersionControlService versionControlService;
+    private final FactoryRoleBootstrapService factoryRoleBootstrapService;
 
     @Override
     public Tenant save(Tenant tenant) throws Exception {
@@ -56,6 +58,9 @@ public class DefaultTbTenantService extends AbstractTbEntityService implements T
                 installScripts.createDefaultTenantDashboards(tenantId, null);
             }
         });
+        if (created) {
+            factoryRoleBootstrapService.ensureTenantDefaultRoles(savedTenant.getId());
+        }
         tenantProfileCache.evict(savedTenant.getId());
 
         TenantProfile oldTenantProfile = oldTenant != null ? tenantProfileService.findTenantProfileById(TenantId.SYS_TENANT_ID, oldTenant.getTenantProfileId()) : null;

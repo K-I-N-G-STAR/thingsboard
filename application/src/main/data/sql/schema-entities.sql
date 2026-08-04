@@ -1047,12 +1047,34 @@ INSERT INTO factory_permission (
 ('5d03cf91-2d8f-4f6b-9f10-000000000004', 0, 'user:read', 'Read users', 'user', 'user', 'read', 'View user list and user details.', true, 100),
 ('5d03cf91-2d8f-4f6b-9f10-000000000005', 0, 'user:manage', 'Manage users', 'user', 'user', 'manage', 'Create, update, disable and assign users.', true, 110),
 
+('5d03cf91-2d8f-4f6b-9f10-000000000049', 0, 'customer:read', 'Read customers', 'customer', 'customer', 'read', 'View customer list and customer details.', true, 120),
+('5d03cf91-2d8f-4f6b-9f10-000000000050', 0, 'customer:write', 'Write customers', 'customer', 'customer', 'write', 'Create and update customers within authorized scope.', true, 130),
+('5d03cf91-2d8f-4f6b-9f10-000000000051', 0, 'customer:delete', 'Delete customers', 'customer', 'customer', 'delete', 'Delete customers within authorized scope.', true, 140),
+
 ('5d03cf91-2d8f-4f6b-9f10-000000000006', 0, 'dashboard:read', 'Read dashboards', 'dashboard', 'dashboard', 'read', 'View dashboards within authorized scope.', true, 200),
 ('5d03cf91-2d8f-4f6b-9f10-000000000007', 0, 'dashboard:write', 'Write dashboards', 'dashboard', 'dashboard', 'write', 'Create and update dashboards within authorized scope.', true, 210),
+('5d03cf91-2d8f-4f6b-9f10-000000000047', 0, 'dashboard:delete', 'Delete dashboards', 'dashboard', 'dashboard', 'delete', 'Delete dashboards within authorized scope.', true, 220),
+('5d03cf91-2d8f-4f6b-9f10-000000000048', 0, 'dashboard:assign', 'Assign dashboards', 'dashboard', 'dashboard', 'assign', 'Assign dashboards to customers, public customer, edge or home dashboard.', true, 230),
 
 ('5d03cf91-2d8f-4f6b-9f10-000000000008', 0, 'device:read', 'Read devices', 'device', 'device', 'read', 'View devices within authorized scope.', true, 300),
 ('5d03cf91-2d8f-4f6b-9f10-000000000009', 0, 'device:write', 'Write devices', 'device', 'device', 'write', 'Create and update devices within authorized scope.', true, 310),
 ('5d03cf91-2d8f-4f6b-9f10-000000000010', 0, 'device:credentials', 'Manage device credentials', 'device', 'device', 'credentials', 'View or update device credentials.', true, 320),
+('5d03cf91-2d8f-4f6b-9f10-000000000034', 0, 'device:delete', 'Delete devices', 'device', 'device', 'delete', 'Delete devices within authorized scope.', true, 330),
+('5d03cf91-2d8f-4f6b-9f10-000000000035', 0, 'device:assign', 'Assign devices', 'device', 'device', 'assign', 'Assign, unassign, claim or publish devices within authorized scope.', true, 340),
+('5d03cf91-2d8f-4f6b-9f10-000000000052', 0, 'device_profile:read', 'Read device profiles', 'device', 'device_profile', 'read', 'View device profiles and device profile information.', true, 345),
+('5d03cf91-2d8f-4f6b-9f10-000000000053', 0, 'device_profile:write', 'Write device profiles', 'device', 'device_profile', 'write', 'Create, update or set default device profiles.', true, 346),
+('5d03cf91-2d8f-4f6b-9f10-000000000054', 0, 'device_profile:delete', 'Delete device profiles', 'device', 'device_profile', 'delete', 'Delete device profiles within authorized scope.', true, 347),
+
+('5d03cf91-2d8f-4f6b-9f10-000000000036', 0, 'asset:read', 'Read assets', 'asset', 'asset', 'read', 'View assets within authorized scope.', true, 350),
+('5d03cf91-2d8f-4f6b-9f10-000000000037', 0, 'asset:write', 'Write assets', 'asset', 'asset', 'write', 'Create and update assets within authorized scope.', true, 360),
+('5d03cf91-2d8f-4f6b-9f10-000000000038', 0, 'asset:delete', 'Delete assets', 'asset', 'asset', 'delete', 'Delete assets within authorized scope.', true, 370),
+('5d03cf91-2d8f-4f6b-9f10-000000000039', 0, 'asset:assign', 'Assign assets', 'asset', 'asset', 'assign', 'Assign, unassign or publish assets within authorized scope.', true, 380),
+('5d03cf91-2d8f-4f6b-9f10-000000000055', 0, 'asset_profile:read', 'Read asset profiles', 'asset', 'asset_profile', 'read', 'View asset profiles and asset profile information.', true, 381),
+('5d03cf91-2d8f-4f6b-9f10-000000000056', 0, 'asset_profile:write', 'Write asset profiles', 'asset', 'asset_profile', 'write', 'Create, update or set default asset profiles.', true, 382),
+('5d03cf91-2d8f-4f6b-9f10-000000000057', 0, 'asset_profile:delete', 'Delete asset profiles', 'asset', 'asset_profile', 'delete', 'Delete asset profiles within authorized scope.', true, 383),
+
+('5d03cf91-2d8f-4f6b-9f10-000000000040', 0, 'relation:read', 'Read relations', 'relation', 'relation', 'read', 'View entity relations within authorized scope.', true, 390),
+('5d03cf91-2d8f-4f6b-9f10-000000000041', 0, 'relation:write', 'Write relations', 'relation', 'relation', 'write', 'Create or delete entity relations within authorized scope.', true, 395),
 
 ('5d03cf91-2d8f-4f6b-9f10-000000000011', 0, 'telemetry:read', 'Read telemetry', 'telemetry', 'telemetry', 'read', 'View telemetry and latest values within authorized scope.', true, 400),
 ('5d03cf91-2d8f-4f6b-9f10-000000000012', 0, 'telemetry:write', 'Write telemetry', 'telemetry', 'telemetry', 'write', 'Write telemetry data manually or through API.', true, 410),
@@ -1063,6 +1085,11 @@ INSERT INTO factory_permission (
 ('5d03cf91-2d8f-4f6b-9f10-000000000015', 0, 'alarm:read', 'Read alarms', 'alarm', 'alarm', 'read', 'View alarms within authorized scope.', true, 600),
 ('5d03cf91-2d8f-4f6b-9f10-000000000016', 0, 'alarm:ack', 'Acknowledge alarms', 'alarm', 'alarm', 'ack', 'Acknowledge alarms within authorized scope.', true, 610),
 ('5d03cf91-2d8f-4f6b-9f10-000000000017', 0, 'alarm:clear', 'Clear alarms', 'alarm', 'alarm', 'clear', 'Clear alarms within authorized scope.', true, 620),
+('5d03cf91-2d8f-4f6b-9f10-000000000042', 0, 'alarm:write', 'Write alarms', 'alarm', 'alarm', 'write', 'Create and update alarms within authorized scope.', true, 630),
+('5d03cf91-2d8f-4f6b-9f10-000000000043', 0, 'alarm:delete', 'Delete alarms', 'alarm', 'alarm', 'delete', 'Delete alarms within authorized scope.', true, 640),
+('5d03cf91-2d8f-4f6b-9f10-000000000044', 0, 'alarm:assign', 'Assign alarms', 'alarm', 'alarm', 'assign', 'Assign or unassign alarms within authorized scope.', true, 650),
+('5d03cf91-2d8f-4f6b-9f10-000000000045', 0, 'alarm_comment:read', 'Read alarm comments', 'alarm', 'alarm_comment', 'read', 'View alarm comments within authorized scope.', true, 660),
+('5d03cf91-2d8f-4f6b-9f10-000000000046', 0, 'alarm_comment:write', 'Write alarm comments', 'alarm', 'alarm_comment', 'write', 'Create, update or delete alarm comments within authorized scope.', true, 670),
 
 ('5d03cf91-2d8f-4f6b-9f10-000000000018', 0, 'recipe:read', 'Read recipes', 'recipe', 'recipe', 'read', 'View process recipes, steps and parameters.', true, 700),
 ('5d03cf91-2d8f-4f6b-9f10-000000000019', 0, 'recipe:create', 'Create recipes', 'recipe', 'recipe', 'create', 'Create process recipes.', true, 710),
@@ -1082,7 +1109,9 @@ INSERT INTO factory_permission (
 ('5d03cf91-2d8f-4f6b-9f10-000000000029', 0, 'rulechain:read', 'Read rule chains', 'rulechain', 'rulechain', 'read', 'View rule chains.', true, 1100),
 ('5d03cf91-2d8f-4f6b-9f10-000000000030', 0, 'rulechain:manage', 'Manage rule chains', 'rulechain', 'rulechain', 'manage', 'Create, update or delete rule chains.', true, 1110),
 
-('5d03cf91-2d8f-4f6b-9f10-000000000031', 0, 'machine:emergency_stop', 'Emergency stop', 'machine', 'machine', 'emergency_stop', 'Execute emergency stop within authorized scope.', true, 1200)
+('5d03cf91-2d8f-4f6b-9f10-000000000031', 0, 'machine:emergency_stop', 'Emergency stop', 'machine', 'machine', 'emergency_stop', 'Execute emergency stop within authorized scope.', true, 1200),
+('5d03cf91-2d8f-4f6b-9f10-000000000032', 0, 'machine:control', 'Control machines', 'machine', 'machine', 'control', 'Execute general machine RPC commands within authorized scope.', true, 1210),
+('5d03cf91-2d8f-4f6b-9f10-000000000033', 0, 'machine:param_write', 'Write machine parameters', 'machine', 'machine', 'param_write', 'Update process or machine parameters through RPC within authorized scope.', true, 1220)
 ON CONFLICT (permission_code) DO UPDATE SET
     permission_name = EXCLUDED.permission_name,
     module = EXCLUDED.module,

@@ -38,6 +38,7 @@ import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.audit.ActionType;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
 import org.thingsboard.server.common.data.msg.TbMsgType;
@@ -48,6 +49,7 @@ import org.thingsboard.server.exception.ToErrorResponseEntity;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.ruleengine.RuleEngineCallService;
 import org.thingsboard.server.service.security.AccessValidator;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -78,6 +80,8 @@ public class RuleEngineController extends BaseController {
     private RuleEngineCallService ruleEngineCallService;
     @Autowired
     private AccessValidator accessValidator;
+    @Autowired
+    private FactoryAccessService factoryAccessService;
 
     @ApiOperation(value = "Push user message to the rule engine (handleRuleEngineRequestForUser)",
             notes = MSG_DESCRIPTION_PREFIX +
@@ -169,6 +173,7 @@ public class RuleEngineController extends BaseController {
             }
             //Check that this is a valid JSON
             JacksonUtil.toJsonNode(requestBody);
+            checkRuleEngineCallPermission(currentUser, entityId);
             final DeferredResult<ResponseEntity> response = new DeferredResult<>();
             accessValidator.validate(currentUser, Operation.WRITE, entityId, new HttpValidationCallback(response, new FutureCallback<DeferredResult<ResponseEntity>>() {
                 @Override
@@ -234,6 +239,14 @@ public class RuleEngineController extends BaseController {
 
     private void logRuleEngineCall(LocalRequestMetaData rpcRequest, TbMsg response, Throwable e) {
         logRuleEngineCall(rpcRequest.user(), rpcRequest.request().getOriginator(), rpcRequest.request().getData(), response, e);
+    }
+
+    private void checkRuleEngineCallPermission(SecurityUser user, EntityId entityId) throws ThingsboardException {
+        if (user.getId().equals(entityId)) {
+            factoryAccessService.checkPermission(user, FactoryPermissionCodes.RULEENGINE_CALL);
+        } else {
+            factoryAccessService.checkPermission(user, FactoryPermissionCodes.RULEENGINE_CALL, entityId);
+        }
     }
 
     private void logRuleEngineCall(SecurityUser user, EntityId entityId, String request, TbMsg response, Throwable e) {

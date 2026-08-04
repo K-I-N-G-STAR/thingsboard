@@ -30,6 +30,7 @@ import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.audit.ActionType;
 import org.thingsboard.server.common.data.exception.ThingsboardErrorCode;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.TenantId;
@@ -43,6 +44,7 @@ import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.rpc.LocalRequestMetaData;
 import org.thingsboard.server.service.rpc.TbCoreDeviceRpcService;
 import org.thingsboard.server.service.security.AccessValidator;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -61,6 +63,9 @@ public abstract class AbstractRpcController extends BaseController {
 
     @Autowired
     protected AccessValidator accessValidator;
+
+    @Autowired
+    protected FactoryAccessService factoryAccessService;
 
     @Value("${server.rest.server_side_rpc.min_timeout:5000}")
     protected long minTimeout;
@@ -84,6 +89,13 @@ public abstract class AbstractRpcController extends BaseController {
             accessValidator.validate(currentUser, Operation.RPC_CALL, deviceId, new HttpValidationCallback(response, new FutureCallback<>() {
                 @Override
                 public void onSuccess(@Nullable DeferredResult<ResponseEntity> result) {
+                    try {
+                        checkFactoryRpcPermission(currentUser, deviceId, body);
+                    } catch (ThingsboardException e) {
+                        logRpcCall(currentUser, deviceId, body, oneWay, Optional.empty(), e);
+                        result.setResult(new ResponseEntity(HttpStatus.FORBIDDEN));
+                        return;
+                    }
                     ToDeviceRpcRequest rpcRequest = new ToDeviceRpcRequest(rpcRequestUUID,
                             tenantId,
                             deviceId,
@@ -113,6 +125,17 @@ public abstract class AbstractRpcController extends BaseController {
         } catch (IllegalArgumentException ioe) {
             throw new ThingsboardException("Invalid request body", ioe, ThingsboardErrorCode.BAD_REQUEST_PARAMS);
         }
+    }
+
+    private void checkFactoryRpcPermission(SecurityUser user, DeviceId deviceId, ToDeviceRpcRequestBody body) throws ThingsboardException {
+        String method = body.getMethod();
+        String permissionCode = switch (method) {
+            case "dispatchRecipe" -> FactoryPermissionCodes.RECIPE_DISPATCH;
+            case "emergencyStop" -> FactoryPermissionCodes.MACHINE_EMERGENCY_STOP;
+            case "setProcessParams" -> FactoryPermissionCodes.MACHINE_PARAM_WRITE;
+            default -> FactoryPermissionCodes.MACHINE_CONTROL;
+        };
+        factoryAccessService.checkPermission(user, permissionCode, deviceId);
     }
 
     public void reply(LocalRequestMetaData rpcRequest, FromDeviceRpcResponse response, HttpStatus timeoutStatus, HttpStatus noActiveConnectionStatus) {

@@ -36,7 +36,7 @@ import org.thingsboard.server.common.data.kv.LongDataEntry;
 import org.thingsboard.server.common.data.kv.StringDataEntry;
 import org.thingsboard.server.common.data.util.TbPair;
 import org.thingsboard.server.common.msg.gateway.metrics.GatewayMetadata;
-import org.thingsboard.server.gen.transport.TransportProtos;
+import org.thingsboard.server.gen.transporta.TransportProtos;
 import org.thingsboard.server.gen.transport.TransportProtos.AttributeUpdateNotificationMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.ClaimDeviceMsg;
 import org.thingsboard.server.gen.transport.TransportProtos.CredentialsType;

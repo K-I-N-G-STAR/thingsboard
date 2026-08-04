@@ -49,6 +49,7 @@ import org.thingsboard.server.common.data.EventInfo;
 import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.edge.Edge;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.EdgeId;
 import org.thingsboard.server.common.data.id.RuleChainId;
 import org.thingsboard.server.common.data.id.RuleNodeId;
@@ -73,6 +74,7 @@ import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.rule.TbRuleChainService;
 import org.thingsboard.server.service.script.RuleNodeJsScriptEngine;
 import org.thingsboard.server.service.script.RuleNodeTbelScriptEngine;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
 
@@ -142,6 +144,9 @@ public class RuleChainController extends BaseController {
     protected TbRuleChainService tbRuleChainService;
 
     @Autowired
+    private FactoryAccessService factoryAccessService;
+
+    @Autowired
     private EventService eventService;
 
     @Autowired
@@ -168,6 +173,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleChainId);
         return checkRuleChain(ruleChainId, Operation.READ);
     }
 
@@ -181,6 +187,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleChainId);
         checkRuleChain(ruleChainId, Operation.READ);
         return tbRuleChainService.getRuleChainOutputLabels(getTenantId(), ruleChainId);
     }
@@ -195,6 +202,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleChainId);
         checkRuleChain(ruleChainId, Operation.READ);
         return tbRuleChainService.getOutputLabelUsage(getCurrentUser().getTenantId(), ruleChainId);
     }
@@ -208,6 +216,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleChainId);
         checkRuleChain(ruleChainId, Operation.READ);
         return ruleChainService.loadRuleChainMetaData(getTenantId(), ruleChainId);
     }
@@ -227,6 +236,7 @@ public class RuleChainController extends BaseController {
             @RequestBody RuleChain ruleChain) throws Exception {
         ruleChain.setTenantId(getCurrentUser().getTenantId());
         checkEntity(ruleChain.getId(), ruleChain, Resource.RULE_CHAIN);
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChain.getId());
         return tbRuleChainService.save(ruleChain, getCurrentUser());
     }
 
@@ -240,6 +250,7 @@ public class RuleChainController extends BaseController {
             @RequestBody DefaultRuleChainCreateRequest request) throws Exception {
         checkNotNull(request);
         checkParameter(request.getName(), "name");
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE);
         return tbRuleChainService.saveDefaultByName(getTenantId(), request, getCurrentUser());
     }
 
@@ -252,6 +263,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.WRITE);
         return tbRuleChainService.setRootRuleChain(getTenantId(), ruleChain, getCurrentUser());
     }
@@ -274,6 +286,7 @@ public class RuleChainController extends BaseController {
                 debugPerTenantLimits.remove(tenantId, debugTbRateLimits);
             }
         }
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainMetaData.getRuleChainId());
         RuleChain ruleChain = checkRuleChain(ruleChainMetaData.getRuleChainId(), Operation.WRITE);
 
         return tbRuleChainService.saveRuleChainMetaData(tenantId, ruleChain, ruleChainMetaData, updateRelated, getCurrentUser());
@@ -297,6 +310,7 @@ public class RuleChainController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         TenantId tenantId = getCurrentUser().getTenantId();
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         RuleChainType type = RuleChainType.CORE;
         if (StringUtils.isNotBlank(typeStr)) {
@@ -316,6 +330,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.DELETE);
         tbRuleChainService.delete(ruleChain, getCurrentUser());
     }
@@ -330,6 +345,7 @@ public class RuleChainController extends BaseController {
             @PathVariable(RULE_NODE_ID) String strRuleNodeId) throws ThingsboardException {
         checkParameter(RULE_NODE_ID, strRuleNodeId);
         RuleNodeId ruleNodeId = new RuleNodeId(toUUID(strRuleNodeId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleNodeId);
         checkRuleNode(ruleNodeId, Operation.READ);
         TenantId tenantId = getCurrentUser().getTenantId();
         return Optional.ofNullable(eventService.findLatestDebugRuleNodeInEvent(tenantId, ruleNodeId))
@@ -340,7 +356,8 @@ public class RuleChainController extends BaseController {
             notes = "Returns 'True' if the TBEL script execution is enabled" + TENANT_AUTHORITY_PARAGRAPH)
     @PreAuthorize("hasAuthority('TENANT_ADMIN')")
     @GetMapping("/ruleChain/tbelEnabled")
-    public Boolean isTbelEnabled() {
+    public Boolean isTbelEnabled() throws ThingsboardException {
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ);
         return tbelEnabled;
     }
 
@@ -352,7 +369,8 @@ public class RuleChainController extends BaseController {
             @Parameter(description = "Script language: JS or TBEL")
             @RequestParam(required = false) ScriptLanguage scriptLang,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Test JS request. See API call description above.")
-            @RequestBody JsonNode inputParams) {
+            @RequestBody JsonNode inputParams) throws ThingsboardException {
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE);
         String script = inputParams.get("script").asText();
         String scriptType = inputParams.get("scriptType").asText();
         JsonNode argNamesJson = inputParams.get("argNames");
@@ -415,6 +433,7 @@ public class RuleChainController extends BaseController {
             @Parameter(description = "A limit of rule chains to export.", required = true)
             @RequestParam("limit") int limit) throws ThingsboardException {
         TenantId tenantId = getCurrentUser().getTenantId();
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ);
         PageLink pageLink = new PageLink(limit);
         return checkNotNull(ruleChainService.exportTenantRuleChains(tenantId, pageLink));
     }
@@ -428,6 +447,7 @@ public class RuleChainController extends BaseController {
             @Parameter(description = "Enables overwrite for existing rule chains with the same name.")
             @RequestParam(required = false, defaultValue = "false") boolean overwrite) throws ThingsboardException {
         TenantId tenantId = getCurrentUser().getTenantId();
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE);
         return ruleChainService.importTenantRuleChains(tenantId, ruleChainData, overwrite, tbRuleChainService::updateRuleNodeConfiguration);
     }
 
@@ -478,6 +498,7 @@ public class RuleChainController extends BaseController {
         Edge edge = checkEdgeId(edgeId, Operation.WRITE);
 
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.READ);
 
         return tbRuleChainService.assignRuleChainToEdge(getTenantId(), ruleChain, edge, getCurrentUser());
@@ -498,6 +519,7 @@ public class RuleChainController extends BaseController {
         EdgeId edgeId = new EdgeId(toUUID(strEdgeId));
         Edge edge = checkEdgeId(edgeId, Operation.WRITE);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.READ);
 
         return tbRuleChainService.unassignRuleChainFromEdge(getTenantId(), ruleChain, edge, getCurrentUser());
@@ -524,6 +546,7 @@ public class RuleChainController extends BaseController {
         TenantId tenantId = getCurrentUser().getTenantId();
         EdgeId edgeId = new EdgeId(toUUID(strEdgeId));
         checkEdgeId(edgeId, Operation.READ);
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return checkNotNull(ruleChainService.findRuleChainsByTenantIdAndEdgeId(tenantId, edgeId, pageLink));
     }
@@ -537,6 +560,7 @@ public class RuleChainController extends BaseController {
                                                   @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.WRITE);
         return tbRuleChainService.setEdgeTemplateRootRuleChain(getTenantId(), ruleChain, getCurrentUser());
     }
@@ -550,6 +574,7 @@ public class RuleChainController extends BaseController {
                                                   @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.WRITE);
         return tbRuleChainService.setAutoAssignToEdgeRuleChain(getTenantId(), ruleChain, getCurrentUser());
     }
@@ -563,6 +588,7 @@ public class RuleChainController extends BaseController {
                                                     @PathVariable(RULE_CHAIN_ID) String strRuleChainId) throws ThingsboardException {
         checkParameter(RULE_CHAIN_ID, strRuleChainId);
         RuleChainId ruleChainId = new RuleChainId(toUUID(strRuleChainId));
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_MANAGE, ruleChainId);
         RuleChain ruleChain = checkRuleChain(ruleChainId, Operation.WRITE);
         return tbRuleChainService.unsetAutoAssignToEdgeRuleChain(getTenantId(), ruleChain, getCurrentUser());
     }
@@ -574,6 +600,7 @@ public class RuleChainController extends BaseController {
     @GetMapping("/ruleChain/autoAssignToEdgeRuleChains")
     public List<RuleChain> getAutoAssignToEdgeRuleChains() throws ThingsboardException {
         TenantId tenantId = getCurrentUser().getTenantId();
+        checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ);
         List<RuleChain> result = new ArrayList<>();
         PageDataIterableByTenant<RuleChain> autoAssignRuleChainsIterator =
                 new PageDataIterableByTenant<>(ruleChainService::findAutoAssignToEdgeRuleChainsByTenantId, tenantId, DEFAULT_PAGE_SIZE);
@@ -590,7 +617,9 @@ public class RuleChainController extends BaseController {
         TenantId tenantId = getCurrentUser().getTenantId();
         List<RuleChainId> ruleChainIds = new ArrayList<>();
         for (UUID ruleChainUUID : ruleChainUUIDs) {
-            ruleChainIds.add(new RuleChainId(ruleChainUUID));
+            RuleChainId ruleChainId = new RuleChainId(ruleChainUUID);
+            checkFactoryRuleChainPermission(FactoryPermissionCodes.RULECHAIN_READ, ruleChainId);
+            ruleChainIds.add(ruleChainId);
         }
         return ruleChainService.findRuleChainsByIds(tenantId, ruleChainIds);
     }
@@ -604,6 +633,14 @@ public class RuleChainController extends BaseController {
             @Parameter(description = "A list of rule chain ids, separated by comma ','", array = @ArraySchema(schema = @Schema(type = "string")), required = true)
             @RequestParam("ruleChainIds") Set<UUID> ruleChainUUIDs) throws Exception {
         return getRuleChainsByIdsV1(ruleChainUUIDs);
+    }
+
+    private void checkFactoryRuleChainPermission(String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode);
+    }
+
+    private void checkFactoryRuleChainPermission(String permissionCode, org.thingsboard.server.common.data.id.EntityId entityId) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode, entityId);
     }
 
 }

@@ -44,6 +44,7 @@ import org.thingsboard.server.common.data.asset.AssetInfo;
 import org.thingsboard.server.common.data.asset.AssetSearchQuery;
 import org.thingsboard.server.common.data.edge.Edge;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.AssetId;
 import org.thingsboard.server.common.data.id.AssetProfileId;
 import org.thingsboard.server.common.data.id.CustomerId;
@@ -60,6 +61,7 @@ import org.thingsboard.server.dao.model.ModelConstants;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.asset.AssetBulkImportService;
 import org.thingsboard.server.service.entitiy.asset.TbAssetService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
@@ -102,6 +104,7 @@ import static org.thingsboard.server.controller.EdgeController.EDGE_ID;
 public class AssetController extends BaseController {
     private final AssetBulkImportService assetBulkImportService;
     private final TbAssetService tbAssetService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String ASSET_ID = "assetId";
 
@@ -117,7 +120,9 @@ public class AssetController extends BaseController {
                               @PathVariable(ASSET_ID) String strAssetId) throws ThingsboardException {
         checkParameter(ASSET_ID, strAssetId);
         AssetId assetId = new AssetId(toUUID(strAssetId));
-        return checkAssetId(assetId, Operation.READ);
+        Asset asset = checkAssetId(assetId, Operation.READ);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_READ, asset.getId());
+        return asset;
     }
 
     @ApiOperation(value = "Get Asset Info (getAssetInfoById)",
@@ -132,7 +137,9 @@ public class AssetController extends BaseController {
                                       @PathVariable(ASSET_ID) String strAssetId) throws ThingsboardException {
         checkParameter(ASSET_ID, strAssetId);
         AssetId assetId = new AssetId(toUUID(strAssetId));
-        return checkAssetInfoId(assetId, Operation.READ);
+        AssetInfo assetInfo = checkAssetInfoId(assetId, Operation.READ);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_READ, assetInfo.getId());
+        return assetInfo;
     }
 
     @ApiOperation(value = "Create Or Update Asset (saveAsset)",
@@ -152,9 +159,15 @@ public class AssetController extends BaseController {
                            @RequestParam(name = "uniquifySeparator", defaultValue = "_") String uniquifySeparator,
                            @Parameter(description = UNIQUIFY_STRATEGY_DESC)
                            @RequestParam(name = "uniquifyStrategy", defaultValue = "RANDOM") UniquifyStrategy uniquifyStrategy) throws Exception {
-        asset.setTenantId(getTenantId());
+        SecurityUser user = getCurrentUser();
+        asset.setTenantId(user.getTenantId());
         checkEntity(asset.getId(), asset, Resource.ASSET);
-        return tbAssetService.save(asset, new NameConflictStrategy(nameConflictPolicy, uniquifySeparator, uniquifyStrategy), getCurrentUser());
+        if (asset.getId() != null) {
+            checkFactoryPermission(user, FactoryPermissionCodes.ASSET_WRITE, asset.getId());
+        } else {
+            checkFactoryPermission(user, FactoryPermissionCodes.ASSET_WRITE);
+        }
+        return tbAssetService.save(asset, new NameConflictStrategy(nameConflictPolicy, uniquifySeparator, uniquifyStrategy), user);
     }
 
     @ApiOperation(value = "Delete asset (deleteAsset)",
@@ -166,6 +179,7 @@ public class AssetController extends BaseController {
         checkParameter(ASSET_ID, strAssetId);
         AssetId assetId = new AssetId(toUUID(strAssetId));
         Asset asset = checkAssetId(assetId, Operation.DELETE);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_DELETE, asset.getId());
         tbAssetService.delete(asset, getCurrentUser());
     }
 
@@ -181,7 +195,8 @@ public class AssetController extends BaseController {
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         Customer customer = checkCustomerId(customerId, Operation.READ);
         AssetId assetId = new AssetId(toUUID(strAssetId));
-        checkAssetId(assetId, Operation.ASSIGN_TO_CUSTOMER);
+        Asset asset = checkAssetId(assetId, Operation.ASSIGN_TO_CUSTOMER);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_ASSIGN, asset.getId());
         return tbAssetService.assignAssetToCustomer(getTenantId(), assetId, customer, getCurrentUser());
     }
 
@@ -198,6 +213,7 @@ public class AssetController extends BaseController {
             throw new IncorrectParameterException("Asset isn't assigned to any customer!");
         }
         Customer customer = checkCustomerId(asset.getCustomerId(), Operation.READ);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_ASSIGN, asset.getId());
         return tbAssetService.unassignAssetToCustomer(getTenantId(), assetId, customer, getCurrentUser());
     }
 
@@ -211,7 +227,8 @@ public class AssetController extends BaseController {
     public Asset assignAssetToPublicCustomer(@Parameter(description = ASSET_ID_PARAM_DESCRIPTION) @PathVariable(ASSET_ID) String strAssetId) throws ThingsboardException {
         checkParameter(ASSET_ID, strAssetId);
         AssetId assetId = new AssetId(toUUID(strAssetId));
-        checkAssetId(assetId, Operation.ASSIGN_TO_CUSTOMER);
+        Asset asset = checkAssetId(assetId, Operation.ASSIGN_TO_CUSTOMER);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_ASSIGN, asset.getId());
         return tbAssetService.assignAssetToPublicCustomer(getTenantId(), assetId, getCurrentUser());
     }
 
@@ -233,13 +250,17 @@ public class AssetController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
+        TenantId tenantId = user.getTenantId();
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<Asset> result;
         if (type != null && type.trim().length() > 0) {
-            return checkNotNull(assetService.findAssetsByTenantIdAndType(tenantId, type, pageLink));
+            result = checkNotNull(assetService.findAssetsByTenantIdAndType(tenantId, type, pageLink));
         } else {
-            return checkNotNull(assetService.findAssetsByTenantId(tenantId, pageLink));
+            result = checkNotNull(assetService.findAssetsByTenantId(tenantId, pageLink));
         }
+        return filterAssetPage(user, result);
     }
 
     @ApiOperation(value = "Get Tenant Asset Infos (getTenantAssetInfos)",
@@ -262,24 +283,31 @@ public class AssetController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
+        TenantId tenantId = user.getTenantId();
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<AssetInfo> result;
         if (type != null && type.trim().length() > 0) {
-            return checkNotNull(assetService.findAssetInfosByTenantIdAndType(tenantId, type, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantIdAndType(tenantId, type, pageLink));
         } else if (assetProfileId != null && assetProfileId.length() > 0) {
             AssetProfileId profileId = new AssetProfileId(toUUID(assetProfileId));
-            return checkNotNull(assetService.findAssetInfosByTenantIdAndAssetProfileId(tenantId, profileId, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantIdAndAssetProfileId(tenantId, profileId, pageLink));
         } else {
-            return checkNotNull(assetService.findAssetInfosByTenantId(tenantId, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantId(tenantId, pageLink));
         }
+        return filterAssetInfoPage(user, result);
     }
 
     @Hidden
     @PreAuthorize("hasAuthority('TENANT_ADMIN')")
     @GetMapping(value = "/tenant/assets", params = {"assetName"})
     public Asset getTenantAsset(@RequestParam String assetName) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
-        return checkNotNull(assetService.findAssetByTenantIdAndName(tenantId, assetName));
+        SecurityUser user = getCurrentUser();
+        TenantId tenantId = user.getTenantId();
+        Asset asset = checkNotNull(assetService.findAssetByTenantIdAndName(tenantId, assetName));
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ, asset.getId());
+        return asset;
     }
 
     @ApiOperation(value = "Get Tenant Asset (getTenantAssetByName)",
@@ -314,15 +342,19 @@ public class AssetController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         checkParameter("customerId", strCustomerId);
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
+        TenantId tenantId = user.getTenantId();
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         checkCustomerId(customerId, Operation.READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<Asset> result;
         if (type != null && type.trim().length() > 0) {
-            return checkNotNull(assetService.findAssetsByTenantIdAndCustomerIdAndType(tenantId, customerId, type, pageLink));
+            result = checkNotNull(assetService.findAssetsByTenantIdAndCustomerIdAndType(tenantId, customerId, type, pageLink));
         } else {
-            return checkNotNull(assetService.findAssetsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
+            result = checkNotNull(assetService.findAssetsByTenantIdAndCustomerId(tenantId, customerId, pageLink));
         }
+        return filterAssetPage(user, result);
     }
 
     @ApiOperation(value = "Get Customer Asset Infos (getCustomerAssetInfos)",
@@ -348,18 +380,22 @@ public class AssetController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         checkParameter("customerId", strCustomerId);
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
+        TenantId tenantId = user.getTenantId();
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         checkCustomerId(customerId, Operation.READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
+        PageData<AssetInfo> result;
         if (type != null && type.trim().length() > 0) {
-            return checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerIdAndType(tenantId, customerId, type, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerIdAndType(tenantId, customerId, type, pageLink));
         } else if (assetProfileId != null && assetProfileId.length() > 0) {
             AssetProfileId profileId = new AssetProfileId(toUUID(assetProfileId));
-            return checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerIdAndAssetProfileId(tenantId, customerId, profileId, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerIdAndAssetProfileId(tenantId, customerId, profileId, pageLink));
         } else {
-            return checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerId(tenantId, customerId, pageLink));
+            result = checkNotNull(assetService.findAssetInfosByTenantIdAndCustomerId(tenantId, customerId, pageLink));
         }
+        return filterAssetInfoPage(user, result);
     }
 
     @ApiOperation(value = "Get Assets By Ids (getAssetsByIds)",
@@ -383,7 +419,7 @@ public class AssetController extends BaseController {
         } else {
             assets = assetService.findAssetsByTenantIdCustomerIdAndIdsAsync(tenantId, customerId, assetIds);
         }
-        return checkNotNull(assets.get());
+        return filterAssets(user, checkNotNull(assets.get()));
     }
 
     @ApiOperation(value = "Find related assets (findAssetsByQuery)",
@@ -397,12 +433,13 @@ public class AssetController extends BaseController {
         checkNotNull(query);
         checkNotNull(query.getParameters());
         checkNotNull(query.getAssetTypes());
+        SecurityUser user = getCurrentUser();
         checkEntityId(query.getParameters().getEntityId(), Operation.READ);
         List<Asset> assets = checkNotNull(assetService.findAssetsByQuery(getTenantId(), query).get());
         assets = assets.stream().filter(asset -> {
             try {
-                accessControlService.checkPermission(getCurrentUser(), Resource.ASSET, Operation.READ, asset.getId(), asset);
-                return true;
+                accessControlService.checkPermission(user, Resource.ASSET, Operation.READ, asset.getId(), asset);
+                return hasFactoryPermission(user, FactoryPermissionCodes.ASSET_READ, asset.getId());
             } catch (ThingsboardException e) {
                 return false;
             }
@@ -418,6 +455,7 @@ public class AssetController extends BaseController {
     @Deprecated(since = "3.6.2")
     public List<EntitySubtype> getAssetTypes() throws ThingsboardException, ExecutionException, InterruptedException {
         SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
         TenantId tenantId = user.getTenantId();
         ListenableFuture<List<EntitySubtype>> assetTypes = assetService.findAssetTypesByTenantId(tenantId);
         return checkNotNull(assetTypes.get());
@@ -441,7 +479,8 @@ public class AssetController extends BaseController {
         Edge edge = checkEdgeId(edgeId, Operation.READ);
 
         AssetId assetId = new AssetId(toUUID(strAssetId));
-        checkAssetId(assetId, Operation.READ);
+        Asset asset = checkAssetId(assetId, Operation.READ);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_ASSIGN, asset.getId());
 
         return tbAssetService.assignAssetToEdge(getTenantId(), assetId, edge, getCurrentUser());
     }
@@ -464,6 +503,7 @@ public class AssetController extends BaseController {
 
         AssetId assetId = new AssetId(toUUID(strAssetId));
         Asset asset = checkAssetId(assetId, Operation.READ);
+        checkFactoryPermission(getCurrentUser(), FactoryPermissionCodes.ASSET_ASSIGN, asset.getId());
 
         return tbAssetService.unassignAssetFromEdge(getTenantId(), asset, edge, getCurrentUser());
     }
@@ -493,7 +533,9 @@ public class AssetController extends BaseController {
             @Parameter(description = "Timestamp. Assets with creation time after it won't be queried")
             @RequestParam(required = false) Long endTime) throws ThingsboardException {
         checkParameter(EDGE_ID, strEdgeId);
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_READ);
+        TenantId tenantId = user.getTenantId();
         EdgeId edgeId = new EdgeId(toUUID(strEdgeId));
         checkEdgeId(edgeId, Operation.READ);
         TimePageLink pageLink = createTimePageLink(pageSize, page, textSearch, sortProperty, sortOrder, startTime, endTime);
@@ -505,8 +547,8 @@ public class AssetController extends BaseController {
         }
         List<Asset> filteredAssets = nonFilteredResult.getData().stream().filter(asset -> {
             try {
-                accessControlService.checkPermission(getCurrentUser(), Resource.ASSET, Operation.READ, asset.getId(), asset);
-                return true;
+                accessControlService.checkPermission(user, Resource.ASSET, Operation.READ, asset.getId(), asset);
+                return hasFactoryPermission(user, FactoryPermissionCodes.ASSET_READ, asset.getId());
             } catch (ThingsboardException e) {
                 return false;
             }
@@ -524,7 +566,42 @@ public class AssetController extends BaseController {
     @PostMapping("/asset/bulk_import")
     public BulkImportResult<Asset> processAssetBulkImport(@RequestBody BulkImportRequest request) throws Exception {
         SecurityUser user = getCurrentUser();
+        checkFactoryPermission(user, FactoryPermissionCodes.ASSET_WRITE);
         return assetBulkImportService.processBulkImport(request, user);
+    }
+
+    private void checkFactoryPermission(SecurityUser user, String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode);
+    }
+
+    private void checkFactoryPermission(SecurityUser user, String permissionCode, AssetId assetId) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode, assetId);
+    }
+
+    private boolean hasFactoryPermission(SecurityUser user, String permissionCode, AssetId assetId) {
+        try {
+            checkFactoryPermission(user, permissionCode, assetId);
+            return true;
+        } catch (ThingsboardException e) {
+            return false;
+        }
+    }
+
+    private List<Asset> filterAssets(SecurityUser user, List<Asset> assets) {
+        return assets.stream()
+                .filter(asset -> asset.getId() != null && hasFactoryPermission(user, FactoryPermissionCodes.ASSET_READ, asset.getId()))
+                .collect(Collectors.toList());
+    }
+
+    private PageData<Asset> filterAssetPage(SecurityUser user, PageData<Asset> pageData) {
+        return new PageData<>(filterAssets(user, pageData.getData()), pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
+    }
+
+    private PageData<AssetInfo> filterAssetInfoPage(SecurityUser user, PageData<AssetInfo> pageData) {
+        List<AssetInfo> data = pageData.getData().stream()
+                .filter(asset -> asset.getId() != null && hasFactoryPermission(user, FactoryPermissionCodes.ASSET_READ, asset.getId()))
+                .collect(Collectors.toList());
+        return new PageData<>(data, pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
     }
 
 }

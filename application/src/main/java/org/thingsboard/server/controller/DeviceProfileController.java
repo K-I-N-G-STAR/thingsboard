@@ -38,6 +38,7 @@ import org.thingsboard.server.common.data.DeviceProfileInfo;
 import org.thingsboard.server.common.data.EntityInfo;
 import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.DeviceProfileId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.page.PageData;
@@ -47,6 +48,7 @@ import org.thingsboard.server.dao.resource.ImageService;
 import org.thingsboard.server.dao.timeseries.TimeseriesService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.device.profile.TbDeviceProfileService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
@@ -82,6 +84,7 @@ public class DeviceProfileController extends BaseController {
 
     private final TbDeviceProfileService tbDeviceProfileService;
     private final ImageService imageService;
+    private final FactoryAccessService factoryAccessService;
 
     @Autowired
     private TimeseriesService timeseriesService;
@@ -99,6 +102,7 @@ public class DeviceProfileController extends BaseController {
             @RequestParam(value = INLINE_IMAGES, required = false) boolean inlineImages) throws ThingsboardException {
         checkParameter(DEVICE_PROFILE_ID, strDeviceProfileId);
         DeviceProfileId deviceProfileId = new DeviceProfileId(toUUID(strDeviceProfileId));
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ, deviceProfileId);
         var result = checkDeviceProfileId(deviceProfileId, Operation.READ);
         if (inlineImages) {
             result = imageService.inlineImage(result);
@@ -117,6 +121,7 @@ public class DeviceProfileController extends BaseController {
             @PathVariable(DEVICE_PROFILE_ID) String strDeviceProfileId) throws ThingsboardException {
         checkParameter(DEVICE_PROFILE_ID, strDeviceProfileId);
         DeviceProfileId deviceProfileId = new DeviceProfileId(toUUID(strDeviceProfileId));
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ, deviceProfileId);
         return new DeviceProfileInfo(checkDeviceProfileId(deviceProfileId, Operation.READ));
     }
 
@@ -127,6 +132,7 @@ public class DeviceProfileController extends BaseController {
     @RequestMapping(value = "/deviceProfileInfo/default", method = RequestMethod.GET)
     @ResponseBody
     public DeviceProfileInfo getDefaultDeviceProfileInfo() throws ThingsboardException {
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         return checkNotNull(deviceProfileService.findDefaultDeviceProfileInfo(getTenantId()));
     }
 
@@ -145,9 +151,11 @@ public class DeviceProfileController extends BaseController {
         DeviceProfileId deviceProfileId;
         if (StringUtils.isNotEmpty(deviceProfileIdStr)) {
             deviceProfileId = new DeviceProfileId(UUID.fromString(deviceProfileIdStr));
+            checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ, deviceProfileId);
             checkDeviceProfileId(deviceProfileId, Operation.READ);
         } else {
             deviceProfileId = null;
+            checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         }
 
         return timeseriesService.findAllKeysByDeviceProfileId(getTenantId(), deviceProfileId);
@@ -168,9 +176,11 @@ public class DeviceProfileController extends BaseController {
         DeviceProfileId deviceProfileId;
         if (StringUtils.isNotEmpty(deviceProfileIdStr)) {
             deviceProfileId = new DeviceProfileId(UUID.fromString(deviceProfileIdStr));
+            checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ, deviceProfileId);
             checkDeviceProfileId(deviceProfileId, Operation.READ);
         } else {
             deviceProfileId = null;
+            checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         }
 
         return attributesService.findAllKeysByDeviceProfileId(getTenantId(), deviceProfileId);
@@ -192,6 +202,7 @@ public class DeviceProfileController extends BaseController {
             @RequestBody DeviceProfile deviceProfile) throws Exception {
         deviceProfile.setTenantId(getTenantId());
         checkEntity(deviceProfile.getId(), deviceProfile, Resource.DEVICE_PROFILE);
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_WRITE, deviceProfile.getId());
         return tbDeviceProfileService.save(deviceProfile, getCurrentUser());
     }
 
@@ -206,6 +217,7 @@ public class DeviceProfileController extends BaseController {
             @PathVariable(DEVICE_PROFILE_ID) String strDeviceProfileId) throws ThingsboardException {
         checkParameter(DEVICE_PROFILE_ID, strDeviceProfileId);
         DeviceProfileId deviceProfileId = new DeviceProfileId(toUUID(strDeviceProfileId));
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_DELETE, deviceProfileId);
         DeviceProfile deviceProfile = checkDeviceProfileId(deviceProfileId, Operation.DELETE);
         tbDeviceProfileService.delete(deviceProfile, getCurrentUser());
     }
@@ -220,6 +232,7 @@ public class DeviceProfileController extends BaseController {
             @PathVariable(DEVICE_PROFILE_ID) String strDeviceProfileId) throws ThingsboardException {
         checkParameter(DEVICE_PROFILE_ID, strDeviceProfileId);
         DeviceProfileId deviceProfileId = new DeviceProfileId(toUUID(strDeviceProfileId));
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_WRITE, deviceProfileId);
         DeviceProfile deviceProfile = checkDeviceProfileId(deviceProfileId, Operation.WRITE);
         DeviceProfile previousDefaultDeviceProfile = deviceProfileService.findDefaultDeviceProfile(getTenantId());
         return tbDeviceProfileService.setDefaultDeviceProfile(deviceProfile, previousDefaultDeviceProfile, getCurrentUser());
@@ -241,6 +254,7 @@ public class DeviceProfileController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return checkNotNull(deviceProfileService.findDeviceProfiles(getTenantId(), pageLink));
     }
@@ -263,6 +277,7 @@ public class DeviceProfileController extends BaseController {
             @RequestParam(required = false) String sortOrder,
             @Parameter(description = "Type of the transport", schema = @Schema(allowableValues = {"DEFAULT", "MQTT", "COAP", "LWM2M", "SNMP"}))
             @RequestParam(required = false) String transportType) throws ThingsboardException {
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return checkNotNull(deviceProfileService.findDeviceProfileInfos(getTenantId(), pageLink, transportType));
     }
@@ -277,6 +292,7 @@ public class DeviceProfileController extends BaseController {
             @Parameter(description = "Flag indicating whether to retrieve exclusively the names of device profiles that are referenced by tenant's devices.")
             @RequestParam(value = "activeOnly", required = false, defaultValue = "false") boolean activeOnly) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ);
         TenantId tenantId = user.getTenantId();
         return checkNotNull(deviceProfileService.findDeviceProfileNamesByTenantId(tenantId, activeOnly));
     }
@@ -288,7 +304,9 @@ public class DeviceProfileController extends BaseController {
         TenantId tenantId = getCurrentUser().getTenantId();
         List<DeviceProfileId> deviceProfileIds = new ArrayList<>();
         for (UUID deviceProfileUUID : deviceProfileUUIDs) {
-            deviceProfileIds.add(new DeviceProfileId(deviceProfileUUID));
+            DeviceProfileId deviceProfileId = new DeviceProfileId(deviceProfileUUID);
+            checkFactoryDeviceProfilePermission(FactoryPermissionCodes.DEVICE_PROFILE_READ, deviceProfileId);
+            deviceProfileIds.add(deviceProfileId);
         }
         return deviceProfileService.findDeviceProfilesByIds(tenantId, deviceProfileIds);
     }
@@ -302,6 +320,14 @@ public class DeviceProfileController extends BaseController {
             @Parameter(description = "A list of device profile ids, separated by comma ','",  array = @ArraySchema(schema = @Schema(type = "string")), required = true)
             @RequestParam("deviceProfileIds") Set<UUID> deviceProfileUUIDs) throws ThingsboardException {
         return getDeviceProfileInfosByIdsV1(deviceProfileUUIDs);
+    }
+
+    private void checkFactoryDeviceProfilePermission(String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode);
+    }
+
+    private void checkFactoryDeviceProfilePermission(String permissionCode, DeviceProfileId deviceProfileId) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode, deviceProfileId);
     }
 
 }

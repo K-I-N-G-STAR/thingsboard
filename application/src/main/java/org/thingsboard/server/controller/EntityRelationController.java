@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
 import org.thingsboard.server.common.data.relation.EntityRelation;
@@ -39,6 +40,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.service.ConstraintValidator;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.entity.relation.TbEntityRelationService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -58,6 +60,7 @@ import static org.thingsboard.server.controller.ControllerConstants.RELATION_TYP
 public class EntityRelationController extends BaseController {
 
     private final TbEntityRelationService tbEntityRelationService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String TO_TYPE = "toType";
     public static final String FROM_ID = "fromId";
@@ -99,7 +102,10 @@ public class EntityRelationController extends BaseController {
         ConstraintValidator.validateFields(relation);
         checkCanCreateRelation(relation.getFrom());
         checkCanCreateRelation(relation.getTo());
-        return tbEntityRelationService.save(getTenantId(), getCurrentUser().getCustomerId(), relation, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkRelationWrite(user, relation.getFrom());
+        checkRelationWrite(user, relation.getTo());
+        return tbEntityRelationService.save(getTenantId(), user.getCustomerId(), relation, user);
     }
 
     @Hidden
@@ -136,10 +142,13 @@ public class EntityRelationController extends BaseController {
         EntityId toId = EntityIdFactory.getByTypeAndId(strToType, strToId);
         checkCanCreateRelation(fromId);
         checkCanCreateRelation(toId);
+        SecurityUser user = getCurrentUser();
+        checkRelationWrite(user, fromId);
+        checkRelationWrite(user, toId);
 
         RelationTypeGroup relationTypeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         EntityRelation relation = new EntityRelation(fromId, toId, strRelationType, relationTypeGroup);
-        return tbEntityRelationService.delete(getTenantId(), getCurrentUser().getCustomerId(), relation, getCurrentUser());
+        return tbEntityRelationService.delete(getTenantId(), user.getCustomerId(), relation, user);
     }
 
     @ApiOperation(value = "Delete common relations (deleteRelations)",
@@ -153,7 +162,9 @@ public class EntityRelationController extends BaseController {
         checkParameter("entityType", strType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strType, strId);
         checkEntityId(entityId, Operation.WRITE);
-        tbEntityRelationService.deleteCommonRelations(getTenantId(), getCurrentUser().getCustomerId(), entityId, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkRelationWrite(user, entityId);
+        tbEntityRelationService.deleteCommonRelations(getTenantId(), user.getCustomerId(), entityId, user);
     }
 
     @ApiOperation(value = "Get Relation (getRelation)",
@@ -174,6 +185,9 @@ public class EntityRelationController extends BaseController {
         EntityId toId = EntityIdFactory.getByTypeAndId(strToType, strToId);
         checkEntityId(fromId, Operation.READ);
         checkEntityId(toId, Operation.READ);
+        SecurityUser user = getCurrentUser();
+        checkRelationRead(user, fromId);
+        checkRelationRead(user, toId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(relationService.getRelation(getTenantId(), fromId, toId, strRelationType, typeGroup));
     }
@@ -188,6 +202,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(FROM_TYPE, strFromType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strFromType, strFromId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findByFrom(getTenantId(), entityId, typeGroup)));
     }
@@ -215,6 +230,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(FROM_TYPE, strFromType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strFromType, strFromId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findInfoByFrom(getTenantId(), entityId, typeGroup).get()));
     }
@@ -243,6 +259,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(RELATION_TYPE, strRelationType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strFromType, strFromId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findByFromAndType(getTenantId(), entityId, strRelationType, typeGroup)));
     }
@@ -271,6 +288,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(TO_TYPE, strToType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strToType, strToId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findByTo(getTenantId(), entityId, typeGroup)));
     }
@@ -298,6 +316,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(TO_TYPE, strToType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strToType, strToId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findInfoByTo(getTenantId(), entityId, typeGroup).get()));
     }
@@ -327,6 +346,7 @@ public class EntityRelationController extends BaseController {
         checkParameter(RELATION_TYPE, strRelationType);
         EntityId entityId = EntityIdFactory.getByTypeAndId(strToType, strToId);
         checkEntityId(entityId, Operation.READ);
+        checkRelationRead(getCurrentUser(), entityId);
         RelationTypeGroup typeGroup = parseRelationTypeGroup(strRelationTypeGroup, RelationTypeGroup.COMMON);
         return checkNotNull(filterRelationsByReadPermission(relationService.findByToAndType(getTenantId(), entityId, strRelationType, typeGroup)));
     }
@@ -355,6 +375,7 @@ public class EntityRelationController extends BaseController {
         checkNotNull(query.getParameters());
         checkNotNull(query.getFilters());
         checkEntityId(query.getParameters().getEntityId(), Operation.READ);
+        checkRelationRead(getCurrentUser(), query.getParameters().getEntityId());
         return checkNotNull(filterRelationsByReadPermission(relationService.findByQuery(getTenantId(), query).get()));
     }
 
@@ -369,6 +390,7 @@ public class EntityRelationController extends BaseController {
         checkNotNull(query.getParameters());
         checkNotNull(query.getFilters());
         checkEntityId(query.getParameters().getEntityId(), Operation.READ);
+        checkRelationRead(getCurrentUser(), query.getParameters().getEntityId());
         return checkNotNull(filterRelationsByReadPermission(relationService.findInfoByQuery(getTenantId(), query).get()));
     }
 
@@ -380,20 +402,31 @@ public class EntityRelationController extends BaseController {
         }
     }
 
-    private <T extends EntityRelation> List<T> filterRelationsByReadPermission(List<T> relationsByQuery) {
+    private <T extends EntityRelation> List<T> filterRelationsByReadPermission(List<T> relationsByQuery) throws ThingsboardException {
+        SecurityUser user = getCurrentUser();
         return relationsByQuery.stream().filter(relationByQuery -> {
             try {
                 checkEntityId(relationByQuery.getTo(), Operation.READ);
+                checkRelationRead(user, relationByQuery.getTo());
             } catch (ThingsboardException e) {
                 return false;
             }
             try {
                 checkEntityId(relationByQuery.getFrom(), Operation.READ);
+                checkRelationRead(user, relationByQuery.getFrom());
             } catch (ThingsboardException e) {
                 return false;
             }
             return true;
         }).toList();
+    }
+
+    private void checkRelationRead(SecurityUser user, EntityId entityId) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.RELATION_READ, entityId);
+    }
+
+    private void checkRelationWrite(SecurityUser user, EntityId entityId) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, FactoryPermissionCodes.RELATION_WRITE, entityId);
     }
 
     private static RelationTypeGroup parseRelationTypeGroup(String strRelationTypeGroup, RelationTypeGroup defaultValue) {

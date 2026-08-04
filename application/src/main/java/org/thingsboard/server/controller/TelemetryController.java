@@ -64,6 +64,7 @@ import org.thingsboard.server.common.data.StringUtils;
 import org.thingsboard.server.common.data.TenantProfile;
 import org.thingsboard.server.common.data.audit.ActionType;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.DeviceId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
@@ -84,6 +85,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.timeseries.TimeseriesService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.security.AccessValidator;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.telemetry.AttributeData;
@@ -151,6 +153,9 @@ public class TelemetryController extends BaseController {
     @Autowired
     private TbTelemetryService tbTelemetryService;
 
+    @Autowired
+    private FactoryAccessService factoryAccessService;
+
     private ExecutorService executor;
 
     @PostConstruct
@@ -178,7 +183,13 @@ public class TelemetryController extends BaseController {
     public DeferredResult<ResponseEntity> getAttributeKeys(
             @Parameter(description = ENTITY_TYPE_PARAM_DESCRIPTION, required = true, schema = @Schema(defaultValue = "DEVICE")) @PathVariable("entityType") String entityType,
             @Parameter(description = ENTITY_ID_PARAM_DESCRIPTION, required = true) @PathVariable("entityId") String entityIdStr) throws ThingsboardException {
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_ATTRIBUTES, entityType, entityIdStr, this::getAttributeKeysCallback);
+        SecurityUser user = getCurrentUser();
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_ATTRIBUTES, entityType, entityIdStr, (result, tenantId, entityId) -> {
+            if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_READ, entityId)) {
+                return;
+            }
+            getAttributeKeysCallback(result, tenantId, entityId);
+        });
     }
 
     @ApiOperation(value = "Get all attribute keys by scope (getAttributeKeysByScope)",
@@ -194,8 +205,14 @@ public class TelemetryController extends BaseController {
             @Parameter(description = ENTITY_TYPE_PARAM_DESCRIPTION, required = true, schema = @Schema(defaultValue = "DEVICE")) @PathVariable("entityType") String entityType,
             @Parameter(description = ENTITY_ID_PARAM_DESCRIPTION, required = true) @PathVariable("entityId") String entityIdStr,
             @Parameter(description = ATTRIBUTES_SCOPE_DESCRIPTION, required = true, schema = @Schema(allowableValues = {"SERVER_SCOPE", "SHARED_SCOPE", "CLIENT_SCOPE"})) @PathVariable("scope") AttributeScope scope) throws ThingsboardException {
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_ATTRIBUTES, entityType, entityIdStr,
-                (result, tenantId, entityId) -> getAttributeKeysCallback(result, tenantId, entityId, scope));
+        SecurityUser user = getCurrentUser();
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_ATTRIBUTES, entityType, entityIdStr,
+                (result, tenantId, entityId) -> {
+                    if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_READ, entityId)) {
+                        return;
+                    }
+                    getAttributeKeysCallback(result, tenantId, entityId, scope);
+                });
     }
 
     @ApiOperation(value = "Get attributes (getAttributes)",
@@ -219,8 +236,13 @@ public class TelemetryController extends BaseController {
             @RequestParam MultiValueMap<String, String> params) throws ThingsboardException {
         List<String> keys = getKeys(keysStr, params);
         SecurityUser user = getCurrentUser();
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_ATTRIBUTES, entityType, entityIdStr,
-                (result, tenantId, entityId) -> getAttributeValuesCallback(result, user, entityId, null, keys));
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_ATTRIBUTES, entityType, entityIdStr,
+                (result, tenantId, entityId) -> {
+                    if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_READ, entityId)) {
+                        return;
+                    }
+                    getAttributeValuesCallback(result, user, entityId, null, keys);
+                });
     }
 
 
@@ -248,8 +270,13 @@ public class TelemetryController extends BaseController {
             @RequestParam MultiValueMap<String, String> params) throws ThingsboardException {
         List<String> keys = getKeys(keysStr, params);
         SecurityUser user = getCurrentUser();
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_ATTRIBUTES, entityType, entityIdStr,
-                (result, tenantId, entityId) -> getAttributeValuesCallback(result, user, entityId, scope, keys));
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_ATTRIBUTES, entityType, entityIdStr,
+                (result, tenantId, entityId) -> {
+                    if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_READ, entityId)) {
+                        return;
+                    }
+                    getAttributeValuesCallback(result, user, entityId, scope, keys);
+                });
     }
 
     @ApiOperation(value = "Get time series keys (getTimeseriesKeys)",
@@ -261,8 +288,14 @@ public class TelemetryController extends BaseController {
     public DeferredResult<ResponseEntity> getTimeseriesKeys(
             @Parameter(description = ENTITY_TYPE_PARAM_DESCRIPTION, required = true, schema = @Schema(defaultValue = "DEVICE")) @PathVariable("entityType") String entityType,
             @Parameter(description = ENTITY_ID_PARAM_DESCRIPTION, required = true) @PathVariable("entityId") String entityIdStr) throws ThingsboardException {
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_TELEMETRY, entityType, entityIdStr,
-                (result, tenantId, entityId) -> Futures.addCallback(tsService.findAllLatest(tenantId, entityId), getTsKeysToResponseCallback(result), MoreExecutors.directExecutor()));
+        SecurityUser user = getCurrentUser();
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_TELEMETRY, entityType, entityIdStr,
+                (result, tenantId, entityId) -> {
+                    if (!checkFactoryPermission(result, user, FactoryPermissionCodes.TELEMETRY_READ, entityId)) {
+                        return;
+                    }
+                    Futures.addCallback(tsService.findAllLatest(tenantId, entityId), getTsKeysToResponseCallback(result), MoreExecutors.directExecutor());
+                });
     }
 
     @ApiOperation(value = "Get latest time series value (getLatestTimeseries)",
@@ -293,8 +326,13 @@ public class TelemetryController extends BaseController {
             @RequestParam MultiValueMap<String, String> params) throws ThingsboardException {
         List<String> keys = getKeys(keysStr, params);
         SecurityUser user = getCurrentUser();
-        return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.READ_TELEMETRY, entityType, entityIdStr,
-                (result, tenantId, entityId) -> getLatestTimeseriesValuesCallback(result, user, entityId, keys, useStrictDataTypes));
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_TELEMETRY, entityType, entityIdStr,
+                (result, tenantId, entityId) -> {
+                    if (!checkFactoryPermission(result, user, FactoryPermissionCodes.TELEMETRY_READ, entityId)) {
+                        return;
+                    }
+                    getLatestTimeseriesValuesCallback(result, user, entityId, keys, useStrictDataTypes);
+                });
     }
 
     @Hidden
@@ -315,11 +353,20 @@ public class TelemetryController extends BaseController {
             @RequestParam(name = "useStrictDataTypes", required = false, defaultValue = "false") Boolean useStrictDataTypes,
             @RequestParam MultiValueMap<String, String> params) throws ThingsboardException {
         List<String> keys = getKeys(keysStr, params);
-        DeferredResult<ResponseEntity> response = new DeferredResult<>();
-        Futures.addCallback(tbTelemetryService.getTimeseries(EntityIdFactory.getByTypeAndId(entityType, entityIdStr), keys, startTs, endTs,
-                        intervalType, interval, timeZone, limit, Aggregation.valueOf(aggStr), orderBy, useStrictDataTypes, getCurrentUser()),
-                getTsKvListCallback(response, useStrictDataTypes), MoreExecutors.directExecutor());
-        return response;
+        EntityId entityId = EntityIdFactory.getByTypeAndId(entityType, entityIdStr);
+        SecurityUser user = getCurrentUser();
+        return accessValidator.validateEntityAndCallback(user, Operation.READ_TELEMETRY, entityId, (result, tenantId, validatedEntityId) -> {
+            if (!checkFactoryPermission(result, user, FactoryPermissionCodes.TELEMETRY_READ, validatedEntityId)) {
+                return;
+            }
+            try {
+                Futures.addCallback(tbTelemetryService.getTimeseries(validatedEntityId, keys, startTs, endTs,
+                                intervalType, interval, timeZone, limit, Aggregation.valueOf(aggStr), orderBy, useStrictDataTypes, user),
+                        getTsKvListCallback(result, useStrictDataTypes), MoreExecutors.directExecutor());
+            } catch (ThingsboardException e) {
+                result.setResult(new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR));
+            }
+        });
     }
 
     @ApiOperation(value = "Get time series data (getTimeseriesHistory)",
@@ -558,6 +605,9 @@ public class TelemetryController extends BaseController {
         }
 
         return accessValidator.validateEntityAndCallback(user, Operation.WRITE_TELEMETRY, entityIdStr, (result, tenantId, entityId) -> {
+            if (!checkFactoryPermission(result, user, FactoryPermissionCodes.TELEMETRY_WRITE, entityId)) {
+                return;
+            }
             List<DeleteTsKvQuery> deleteTsKvQueries = new ArrayList<>();
             for (String key : keys) {
                 deleteTsKvQueries.add(new BaseDeleteTsKvQuery(key, deleteFromTs, deleteToTs, rewriteLatestIfDeleted, deleteLatest));
@@ -651,6 +701,9 @@ public class TelemetryController extends BaseController {
         SecurityUser user = getCurrentUser();
 
         return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.WRITE_ATTRIBUTES, entityIdSrc, (result, tenantId, entityId) -> {
+            if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_WRITE, entityId)) {
+                return;
+            }
             tsSubService.deleteAttributes(AttributesDeleteRequest.builder()
                     .tenantId(tenantId)
                     .entityId(entityId)
@@ -700,6 +753,9 @@ public class TelemetryController extends BaseController {
             }
             SecurityUser user = getCurrentUser();
             return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.WRITE_ATTRIBUTES, entityIdSrc, (result, tenantId, entityId) -> {
+                if (!checkFactoryPermission(result, user, FactoryPermissionCodes.ATTRIBUTE_WRITE, entityId)) {
+                    return;
+                }
                 tsSubService.saveAttributes(AttributesSaveRequest.builder()
                         .tenantId(tenantId)
                         .entityId(entityId)
@@ -749,6 +805,9 @@ public class TelemetryController extends BaseController {
         }
         SecurityUser user = getCurrentUser();
         return accessValidator.validateEntityAndCallback(getCurrentUser(), Operation.WRITE_TELEMETRY, entityIdSrc, (result, tenantId, entityId) -> {
+            if (!checkFactoryPermission(result, user, FactoryPermissionCodes.TELEMETRY_WRITE, entityId)) {
+                return;
+            }
             long tenantTtl = ttl;
             if (!TenantId.SYS_TENANT_ID.equals(tenantId) && tenantTtl == 0) {
                 TenantProfile tenantProfile = tenantProfileCache.get(tenantId);
@@ -775,6 +834,16 @@ public class TelemetryController extends BaseController {
                     })
                     .build());
         });
+    }
+
+    private boolean checkFactoryPermission(DeferredResult<ResponseEntity> result, SecurityUser user, String permissionCode, EntityId entityId) {
+        try {
+            factoryAccessService.checkPermission(user, permissionCode, entityId);
+            return true;
+        } catch (ThingsboardException e) {
+            result.setResult(new ResponseEntity(HttpStatus.FORBIDDEN));
+            return false;
+        }
     }
 
     private void getLatestTimeseriesValuesCallback(@Nullable DeferredResult<ResponseEntity> result, SecurityUser user, EntityId entityId, List<String> keys, Boolean useStrictDataTypes) {

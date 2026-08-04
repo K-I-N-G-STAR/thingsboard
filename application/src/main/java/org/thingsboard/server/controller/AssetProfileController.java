@@ -36,6 +36,7 @@ import org.thingsboard.server.common.data.EntityInfo;
 import org.thingsboard.server.common.data.asset.AssetProfile;
 import org.thingsboard.server.common.data.asset.AssetProfileInfo;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.AssetProfileId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.page.PageData;
@@ -44,6 +45,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.resource.ImageService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.asset.profile.TbAssetProfileService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
@@ -78,6 +80,7 @@ public class AssetProfileController extends BaseController {
 
     private final TbAssetProfileService tbAssetProfileService;
     private final ImageService imageService;
+    private final FactoryAccessService factoryAccessService;
 
     @ApiOperation(value = "Get Asset Profile (getAssetProfileById)",
             notes = "Fetch the Asset Profile object based on the provided Asset Profile Id. " +
@@ -92,6 +95,7 @@ public class AssetProfileController extends BaseController {
             @RequestParam(value = INLINE_IMAGES, required = false) boolean inlineImages) throws ThingsboardException {
         checkParameter(ASSET_PROFILE_ID, strAssetProfileId);
         AssetProfileId assetProfileId = new AssetProfileId(toUUID(strAssetProfileId));
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ, assetProfileId);
         var result = checkAssetProfileId(assetProfileId, Operation.READ);
         if (inlineImages) {
             result = imageService.inlineImage(result);
@@ -110,6 +114,7 @@ public class AssetProfileController extends BaseController {
             @PathVariable(ASSET_PROFILE_ID) String strAssetProfileId) throws ThingsboardException {
         checkParameter(ASSET_PROFILE_ID, strAssetProfileId);
         AssetProfileId assetProfileId = new AssetProfileId(toUUID(strAssetProfileId));
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ, assetProfileId);
         return new AssetProfileInfo(checkAssetProfileId(assetProfileId, Operation.READ));
     }
 
@@ -120,6 +125,7 @@ public class AssetProfileController extends BaseController {
     @RequestMapping(value = "/assetProfileInfo/default", method = RequestMethod.GET)
     @ResponseBody
     public AssetProfileInfo getDefaultAssetProfileInfo() throws ThingsboardException {
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ);
         return checkNotNull(assetProfileService.findDefaultAssetProfileInfo(getTenantId()));
     }
 
@@ -139,6 +145,7 @@ public class AssetProfileController extends BaseController {
             @RequestBody AssetProfile assetProfile) throws Exception {
         assetProfile.setTenantId(getTenantId());
         checkEntity(assetProfile.getId(), assetProfile, Resource.ASSET_PROFILE);
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_WRITE, assetProfile.getId());
         return tbAssetProfileService.save(assetProfile, getCurrentUser());
     }
 
@@ -153,6 +160,7 @@ public class AssetProfileController extends BaseController {
             @PathVariable(ASSET_PROFILE_ID) String strAssetProfileId) throws ThingsboardException {
         checkParameter(ASSET_PROFILE_ID, strAssetProfileId);
         AssetProfileId assetProfileId = new AssetProfileId(toUUID(strAssetProfileId));
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_DELETE, assetProfileId);
         AssetProfile assetProfile = checkAssetProfileId(assetProfileId, Operation.DELETE);
         tbAssetProfileService.delete(assetProfile, getCurrentUser());
     }
@@ -167,6 +175,7 @@ public class AssetProfileController extends BaseController {
             @PathVariable(ASSET_PROFILE_ID) String strAssetProfileId) throws ThingsboardException {
         checkParameter(ASSET_PROFILE_ID, strAssetProfileId);
         AssetProfileId assetProfileId = new AssetProfileId(toUUID(strAssetProfileId));
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_WRITE, assetProfileId);
         AssetProfile assetProfile = checkAssetProfileId(assetProfileId, Operation.WRITE);
         AssetProfile previousDefaultAssetProfile = assetProfileService.findDefaultAssetProfile(getTenantId());
         return tbAssetProfileService.setDefaultAssetProfile(assetProfile, previousDefaultAssetProfile, getCurrentUser());
@@ -188,6 +197,7 @@ public class AssetProfileController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return checkNotNull(assetProfileService.findAssetProfiles(getTenantId(), pageLink));
     }
@@ -208,6 +218,7 @@ public class AssetProfileController extends BaseController {
             @RequestParam(required = false) String sortProperty,
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ);
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         return checkNotNull(assetProfileService.findAssetProfileInfos(getTenantId(), pageLink));
     }
@@ -222,6 +233,7 @@ public class AssetProfileController extends BaseController {
             @Parameter(description = "Flag indicating whether to retrieve exclusively the names of asset profiles that are referenced by tenant's assets.")
             @RequestParam(value = "activeOnly", required = false, defaultValue = "false") boolean activeOnly) throws ThingsboardException {
         SecurityUser user = getCurrentUser();
+        checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ);
         TenantId tenantId = user.getTenantId();
         return checkNotNull(assetProfileService.findAssetProfileNamesByTenantId(tenantId, activeOnly));
     }
@@ -235,7 +247,9 @@ public class AssetProfileController extends BaseController {
         TenantId tenantId = getCurrentUser().getTenantId();
         List<AssetProfileId> assetProfileIds = new ArrayList<>();
         for (UUID assetProfileUUID : assetProfileUUIDs) {
-            assetProfileIds.add(new AssetProfileId(assetProfileUUID));
+            AssetProfileId assetProfileId = new AssetProfileId(assetProfileUUID);
+            checkFactoryAssetProfilePermission(FactoryPermissionCodes.ASSET_PROFILE_READ, assetProfileId);
+            assetProfileIds.add(assetProfileId);
         }
         return assetProfileService.findAssetProfilesByIds(tenantId, assetProfileIds);
     }
@@ -249,6 +263,14 @@ public class AssetProfileController extends BaseController {
             @Parameter(description = "A list of asset profile ids, separated by comma ','", array = @ArraySchema(schema = @Schema(type = "string")), required = true)
             @RequestParam("assetProfileIds") Set<UUID> assetProfileUUIDs) throws ThingsboardException {
         return getAssetProfilesByIdsV1(assetProfileUUIDs);
+    }
+
+    private void checkFactoryAssetProfilePermission(String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode);
+    }
+
+    private void checkFactoryAssetProfilePermission(String permissionCode, AssetProfileId assetProfileId) throws ThingsboardException {
+        factoryAccessService.checkPermission(getCurrentUser(), permissionCode, assetProfileId);
     }
 
 }

@@ -39,6 +39,7 @@ import org.thingsboard.server.common.data.NameConflictStrategy;
 import org.thingsboard.server.common.data.NameConflictPolicy;
 import org.thingsboard.server.common.data.UniquifyStrategy;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.CustomerId;
 import org.thingsboard.server.common.data.id.TenantId;
 import org.thingsboard.server.common.data.page.PageData;
@@ -46,6 +47,8 @@ import org.thingsboard.server.common.data.page.PageLink;
 import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.customer.TbCustomerService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
+import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 import org.thingsboard.server.service.security.permission.Resource;
 
@@ -53,6 +56,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.thingsboard.server.controller.ControllerConstants.CUSTOMER_ID;
 import static org.thingsboard.server.controller.ControllerConstants.CUSTOMER_ID_PARAM_DESCRIPTION;
@@ -77,6 +81,7 @@ import static org.thingsboard.server.controller.ControllerConstants.UUID_WIKI_LI
 public class CustomerController extends BaseController {
 
     private final TbCustomerService tbCustomerService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String IS_PUBLIC = "isPublic";
     public static final String CUSTOMER_SECURITY_CHECK = "If the user has the authority of 'Tenant Administrator', the server checks that the customer is owned by the same tenant. " +
@@ -94,6 +99,7 @@ public class CustomerController extends BaseController {
         checkParameter(CUSTOMER_ID, strCustomerId);
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         Customer customer = checkCustomerId(customerId, Operation.READ);
+        checkCustomerReadPermission(getCurrentUser(), customer);
         checkDashboardInfo(customer.getAdditionalInfo(), HOME_DASHBOARD);
         return customer;
     }
@@ -111,6 +117,7 @@ public class CustomerController extends BaseController {
         checkParameter(CUSTOMER_ID, strCustomerId);
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         Customer customer = checkCustomerId(customerId, Operation.READ);
+        checkCustomerReadPermission(getCurrentUser(), customer);
         ObjectNode infoObject = JacksonUtil.newObjectNode();
         infoObject.put("title", customer.getTitle());
         infoObject.put(IS_PUBLIC, customer.isPublic());
@@ -129,6 +136,7 @@ public class CustomerController extends BaseController {
         checkParameter(CUSTOMER_ID, strCustomerId);
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         Customer customer = checkCustomerId(customerId, Operation.READ);
+        checkCustomerReadPermission(getCurrentUser(), customer);
         return customer.getTitle();
     }
 
@@ -149,9 +157,15 @@ public class CustomerController extends BaseController {
                                  @RequestParam(name = "uniquifySeparator", defaultValue = "_") String uniquifySeparator,
                                  @Parameter(description = UNIQUIFY_STRATEGY_DESC)
                                  @RequestParam(name = "uniquifyStrategy", defaultValue = "RANDOM") UniquifyStrategy uniquifyStrategy) throws Exception {
-        customer.setTenantId(getTenantId());
+        SecurityUser user = getCurrentUser();
+        customer.setTenantId(user.getTenantId());
         checkEntity(customer.getId(), customer, Resource.CUSTOMER);
-        return tbCustomerService.save(customer, new NameConflictStrategy(nameConflictPolicy, uniquifySeparator, uniquifyStrategy), getCurrentUser());
+        if (customer.getId() != null) {
+            checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_WRITE, customer.getId());
+        } else {
+            checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_WRITE);
+        }
+        return tbCustomerService.save(customer, new NameConflictStrategy(nameConflictPolicy, uniquifySeparator, uniquifyStrategy), user);
     }
 
     @ApiOperation(value = "Delete Customer (deleteCustomer)",
@@ -166,7 +180,9 @@ public class CustomerController extends BaseController {
         checkParameter(CUSTOMER_ID, strCustomerId);
         CustomerId customerId = new CustomerId(toUUID(strCustomerId));
         Customer customer = checkCustomerId(customerId, Operation.DELETE);
-        tbCustomerService.delete(customer, getCurrentUser());
+        SecurityUser user = getCurrentUser();
+        checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_DELETE, customer.getId());
+        tbCustomerService.delete(customer, user);
     }
 
     @ApiOperation(value = "Get Tenant Customers (getCustomers)",
@@ -186,8 +202,10 @@ public class CustomerController extends BaseController {
             @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
             @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
-        TenantId tenantId = getCurrentUser().getTenantId();
-        return checkNotNull(customerService.findCustomersByTenantId(tenantId, pageLink));
+        SecurityUser user = getCurrentUser();
+        checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_READ);
+        TenantId tenantId = user.getTenantId();
+        return filterCustomerPage(checkNotNull(customerService.findCustomersByTenantId(tenantId, pageLink)));
     }
 
     @ApiOperation(value = "Get Tenant Customer by Customer title (getTenantCustomer)",
@@ -197,8 +215,12 @@ public class CustomerController extends BaseController {
     public Customer getTenantCustomer(
             @Parameter(description = "A string value representing the Customer title.")
             @RequestParam String customerTitle) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
-        return checkNotNull(customerService.findCustomerByTenantIdAndTitle(tenantId, customerTitle), "Customer with title [" + customerTitle + "] is not found");
+        SecurityUser user = getCurrentUser();
+        checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_READ);
+        TenantId tenantId = user.getTenantId();
+        Customer customer = checkNotNull(customerService.findCustomerByTenantIdAndTitle(tenantId, customerTitle), "Customer with title [" + customerTitle + "] is not found");
+        checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_READ, customer.getId());
+        return customer;
     }
 
     @Hidden
@@ -207,12 +229,14 @@ public class CustomerController extends BaseController {
     public List<Customer> getCustomersByIdsV1(
             @Parameter(description = "A list of customer ids, separated by comma ','", array = @ArraySchema(schema = @Schema(type = "string")), required = true)
             @RequestParam("customerIds") Set<UUID> customerUUIDs) throws ThingsboardException {
-        TenantId tenantId = getCurrentUser().getTenantId();
+        SecurityUser user = getCurrentUser();
+        checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_READ);
+        TenantId tenantId = user.getTenantId();
         List<CustomerId> customerIds = new ArrayList<>();
         for (UUID customerUUID : customerUUIDs) {
             customerIds.add(new CustomerId(customerUUID));
         }
-        return customerService.findCustomersByTenantIdAndIds(tenantId, customerIds);
+        return filterCustomersByReadPermission(customerService.findCustomersByTenantIdAndIds(tenantId, customerIds));
     }
 
     @ApiOperation(value = "Get customers by Customer Ids (getCustomersByIds)",
@@ -224,6 +248,46 @@ public class CustomerController extends BaseController {
             @Parameter(description = "A list of customer ids, separated by comma ','", array = @ArraySchema(schema = @Schema(type = "string")), required = true)
             @RequestParam("customerIds") Set<UUID> customerUUIDs) throws ThingsboardException {
         return getCustomersByIdsV1(customerUUIDs);
+    }
+
+    private void checkCustomerPermission(SecurityUser user, String permissionCode) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode);
+    }
+
+    private void checkCustomerPermission(SecurityUser user, String permissionCode, CustomerId customerId) throws ThingsboardException {
+        factoryAccessService.checkPermission(user, permissionCode, customerId);
+    }
+
+    private void checkCustomerReadPermission(SecurityUser user, Customer customer) throws ThingsboardException {
+        if (!user.isCustomerUser() || !user.getCustomerId().equals(customer.getId())) {
+            checkCustomerPermission(user, FactoryPermissionCodes.CUSTOMER_READ, customer.getId());
+        }
+    }
+
+    private boolean hasCustomerReadPermission(SecurityUser user, Customer customer) {
+        try {
+            checkCustomerReadPermission(user, customer);
+            return true;
+        } catch (ThingsboardException e) {
+            return false;
+        }
+    }
+
+    private PageData<Customer> filterCustomerPage(PageData<Customer> pageData) throws ThingsboardException {
+        List<Customer> data = filterCustomersByReadPermission(pageData.getData());
+        return new PageData<>(data, pageData.getTotalPages(), pageData.getTotalElements(), pageData.hasNext());
+    }
+
+    private List<Customer> filterCustomersByReadPermission(List<Customer> customers) throws ThingsboardException {
+        SecurityUser user = getCurrentUser();
+        return customers.stream().filter(customer -> {
+            try {
+                return accessControlService.hasPermission(user, Resource.CUSTOMER, Operation.READ, customer.getId(), customer)
+                        && hasCustomerReadPermission(user, customer);
+            } catch (ThingsboardException e) {
+                return false;
+            }
+        }).collect(Collectors.toList());
     }
 
 }

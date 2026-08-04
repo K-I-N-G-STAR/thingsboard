@@ -41,6 +41,7 @@ import org.thingsboard.server.common.data.cf.CalculatedFieldInfo;
 import org.thingsboard.server.common.data.cf.CalculatedFieldType;
 import org.thingsboard.server.common.data.event.EventType;
 import org.thingsboard.server.common.data.exception.ThingsboardException;
+import org.thingsboard.server.common.data.factory.FactoryPermissionCodes;
 import org.thingsboard.server.common.data.id.CalculatedFieldId;
 import org.thingsboard.server.common.data.id.EntityId;
 import org.thingsboard.server.common.data.id.EntityIdFactory;
@@ -51,6 +52,7 @@ import org.thingsboard.server.config.annotations.ApiOperation;
 import org.thingsboard.server.dao.event.EventService;
 import org.thingsboard.server.queue.util.TbCoreComponent;
 import org.thingsboard.server.service.entitiy.cf.TbCalculatedFieldService;
+import org.thingsboard.server.service.security.factory.FactoryAccessService;
 import org.thingsboard.server.service.security.model.SecurityUser;
 import org.thingsboard.server.service.security.permission.Operation;
 
@@ -81,6 +83,7 @@ public class AlarmRuleController extends BaseController {
 
     private final TbCalculatedFieldService tbCalculatedFieldService;
     private final EventService eventService;
+    private final FactoryAccessService factoryAccessService;
 
     public static final String ALARM_RULE_ID = "alarmRuleId";
 
@@ -110,8 +113,10 @@ public class AlarmRuleController extends BaseController {
                                              @RequestBody AlarmRuleDefinition alarmRuleDefinition) throws Exception {
         alarmRuleDefinition.setTenantId(getTenantId());
         checkEntityId(alarmRuleDefinition.getEntityId(), Operation.WRITE_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_WRITE, alarmRuleDefinition.getEntityId());
         if (alarmRuleDefinition.getId() != null) {
-            checkAlarmRule(alarmRuleDefinition.getId());
+            CalculatedField existingAlarmRule = checkAlarmRule(alarmRuleDefinition.getId());
+            factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_WRITE, existingAlarmRule.getEntityId());
         }
         CalculatedField calculatedField = alarmRuleDefinition.toCalculatedField();
         checkReferencedEntities(calculatedField.getConfiguration());
@@ -128,6 +133,7 @@ public class AlarmRuleController extends BaseController {
         CalculatedFieldId calculatedFieldId = new CalculatedFieldId(toUUID(strAlarmRuleId));
         CalculatedField calculatedField = checkAlarmRule(calculatedFieldId);
         checkEntityId(calculatedField.getEntityId(), Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_READ, calculatedField.getEntityId());
         return AlarmRuleDefinition.fromCalculatedField(calculatedField);
     }
 
@@ -147,6 +153,7 @@ public class AlarmRuleController extends BaseController {
         checkParameter("entityId", entityIdStr);
         EntityId entityId = EntityIdFactory.getByTypeAndUuid(entityType, entityIdStr);
         checkEntityId(entityId, Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_READ, entityId);
         PageData<CalculatedField> result = checkNotNull(tbCalculatedFieldService.findByTenantIdAndEntityId(getTenantId(), entityId, CalculatedFieldType.ALARM, pageLink));
         return result.mapData(AlarmRuleDefinition::fromCalculatedField);
     }
@@ -171,6 +178,7 @@ public class AlarmRuleController extends BaseController {
                                                            @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, sortProperty, sortOrder);
         SecurityUser user = getCurrentUser();
+        checkAlarmRuleReadPermission(user, entityType, entities);
 
         Set<EntityType> entityTypes;
         if (entityType == null) {
@@ -204,6 +212,7 @@ public class AlarmRuleController extends BaseController {
                                               @Parameter(description = SORT_ORDER_DESCRIPTION, schema = @Schema(allowableValues = {"ASC", "DESC"}))
                                               @RequestParam(required = false) String sortOrder) throws ThingsboardException {
         PageLink pageLink = createPageLink(pageSize, page, textSearch, "name", sortOrder);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_READ);
         return calculatedFieldService.findCalculatedFieldNamesByTenantIdAndType(getTenantId(), CalculatedFieldType.ALARM, pageLink);
     }
 
@@ -217,6 +226,7 @@ public class AlarmRuleController extends BaseController {
         CalculatedFieldId calculatedFieldId = new CalculatedFieldId(toUUID(strAlarmRuleId));
         CalculatedField calculatedField = checkAlarmRule(calculatedFieldId);
         checkEntityId(calculatedField.getEntityId(), Operation.WRITE_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_DELETE, calculatedField.getEntityId());
         tbCalculatedFieldService.delete(calculatedField, getCurrentUser());
     }
 
@@ -230,6 +240,7 @@ public class AlarmRuleController extends BaseController {
         CalculatedFieldId calculatedFieldId = new CalculatedFieldId(toUUID(strAlarmRuleId));
         CalculatedField calculatedField = checkAlarmRule(calculatedFieldId);
         checkEntityId(calculatedField.getEntityId(), Operation.READ_CALCULATED_FIELD);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_READ, calculatedField.getEntityId());
         TenantId tenantId = getCurrentUser().getTenantId();
         return Optional.ofNullable(eventService.findLatestEvents(tenantId, calculatedFieldId, EventType.DEBUG_CALCULATED_FIELD, 1))
                 .flatMap(events -> events.stream().map(EventInfo::getBody).findFirst())
@@ -244,7 +255,19 @@ public class AlarmRuleController extends BaseController {
             @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Test alarm rule TBEL condition expression. The expression must return a boolean value.")
             @RequestBody JsonNode inputParams) throws ThingsboardException {
         checkParameter("expression", inputParams.has("expression") ? inputParams.get("expression").asText() : null);
+        factoryAccessService.checkPermission(getCurrentUser(), FactoryPermissionCodes.ALARM_RULE_TEST);
         return tbCalculatedFieldService.executeTestScript(getTenantId(), inputParams);
+    }
+
+    private void checkAlarmRuleReadPermission(SecurityUser user, EntityType entityType, Set<UUID> entities) throws ThingsboardException {
+        if (entityType != null && entities != null && !entities.isEmpty()) {
+            for (UUID entityId : entities) {
+                factoryAccessService.checkPermission(user, FactoryPermissionCodes.ALARM_RULE_READ,
+                        EntityIdFactory.getByTypeAndUuid(entityType, entityId));
+            }
+        } else {
+            factoryAccessService.checkPermission(user, FactoryPermissionCodes.ALARM_RULE_READ);
+        }
     }
 
     private CalculatedField checkAlarmRule(CalculatedFieldId calculatedFieldId) throws ThingsboardException {
