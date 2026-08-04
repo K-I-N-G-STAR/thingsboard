@@ -1091,6 +1091,18 @@ INSERT INTO factory_permission (
 ('5d03cf91-2d8f-4f6b-9f10-000000000045', 0, 'alarm_comment:read', 'Read alarm comments', 'alarm', 'alarm_comment', 'read', 'View alarm comments within authorized scope.', true, 660),
 ('5d03cf91-2d8f-4f6b-9f10-000000000046', 0, 'alarm_comment:write', 'Write alarm comments', 'alarm', 'alarm_comment', 'write', 'Create, update or delete alarm comments within authorized scope.', true, 670),
 
+('5d03cf91-2d8f-4f6b-9f10-000000000063', 0, 'alarm_rule:read', 'Read alarm rules', 'alarm_rule', 'alarm_rule', 'read', 'View alarm rules and debug events within authorized scope.', true, 671),
+('5d03cf91-2d8f-4f6b-9f10-000000000064', 0, 'alarm_rule:write', 'Write alarm rules', 'alarm_rule', 'alarm_rule', 'write', 'Create and update alarm rules within authorized scope.', true, 672),
+('5d03cf91-2d8f-4f6b-9f10-000000000065', 0, 'alarm_rule:delete', 'Delete alarm rules', 'alarm_rule', 'alarm_rule', 'delete', 'Delete alarm rules within authorized scope.', true, 673),
+('5d03cf91-2d8f-4f6b-9f10-000000000066', 0, 'alarm_rule:test', 'Test alarm rule scripts', 'alarm_rule', 'alarm_rule', 'test', 'Execute alarm rule script test expressions.', true, 674),
+
+('5d03cf91-2d8f-4f6b-9f10-000000000059', 0, 'calculated_field:read', 'Read calculated fields', 'calculated_field', 'calculated_field', 'read', 'View calculated fields and debug events within authorized scope.', true, 680),
+('5d03cf91-2d8f-4f6b-9f10-000000000060', 0, 'calculated_field:write', 'Write calculated fields', 'calculated_field', 'calculated_field', 'write', 'Create and update calculated fields within authorized scope.', true, 681),
+('5d03cf91-2d8f-4f6b-9f10-000000000061', 0, 'calculated_field:delete', 'Delete calculated fields', 'calculated_field', 'calculated_field', 'delete', 'Delete calculated fields within authorized scope.', true, 682),
+('5d03cf91-2d8f-4f6b-9f10-000000000062', 0, 'calculated_field:test', 'Test calculated field scripts', 'calculated_field', 'calculated_field', 'test', 'Execute calculated field script test expressions.', true, 683),
+('5d03cf91-2d8f-4f6b-9f10-000000000067', 0, 'ota:manage', 'Manage OTA packages', 'ota', 'ota_package', 'manage', 'View, create, update, upload, download and delete OTA packages.', true, 684),
+('5d03cf91-2d8f-4f6b-9f10-000000000068', 0, 'api_key:manage', 'Manage API keys', 'api_key', 'api_key', 'manage', 'Create, view, update, enable, disable and delete API keys for authorized users.', true, 685),
+
 ('5d03cf91-2d8f-4f6b-9f10-000000000018', 0, 'recipe:read', 'Read recipes', 'recipe', 'recipe', 'read', 'View process recipes, steps and parameters.', true, 700),
 ('5d03cf91-2d8f-4f6b-9f10-000000000019', 0, 'recipe:create', 'Create recipes', 'recipe', 'recipe', 'create', 'Create process recipes.', true, 710),
 ('5d03cf91-2d8f-4f6b-9f10-000000000020', 0, 'recipe:update', 'Update recipes', 'recipe', 'recipe', 'update', 'Update process recipes, steps and parameters.', true, 720),
@@ -1108,6 +1120,7 @@ INSERT INTO factory_permission (
 
 ('5d03cf91-2d8f-4f6b-9f10-000000000029', 0, 'rulechain:read', 'Read rule chains', 'rulechain', 'rulechain', 'read', 'View rule chains.', true, 1100),
 ('5d03cf91-2d8f-4f6b-9f10-000000000030', 0, 'rulechain:manage', 'Manage rule chains', 'rulechain', 'rulechain', 'manage', 'Create, update or delete rule chains.', true, 1110),
+('5d03cf91-2d8f-4f6b-9f10-000000000058', 0, 'ruleengine:call', 'Call rule engine', 'ruleengine', 'ruleengine', 'call', 'Send REST API messages to rule engine within authorized scope.', true, 1120),
 
 ('5d03cf91-2d8f-4f6b-9f10-000000000031', 0, 'machine:emergency_stop', 'Emergency stop', 'machine', 'machine', 'emergency_stop', 'Execute emergency stop within authorized scope.', true, 1200),
 ('5d03cf91-2d8f-4f6b-9f10-000000000032', 0, 'machine:control', 'Control machines', 'machine', 'machine', 'control', 'Execute general machine RPC commands within authorized scope.', true, 1210),
