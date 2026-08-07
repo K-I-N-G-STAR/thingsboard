@@ -20,9 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.thingsboard.server.common.data.EntityType;
 import org.thingsboard.server.common.data.factory.FactoryPermission;
 import org.thingsboard.server.common.data.factory.FactoryRole;
 import org.thingsboard.server.common.data.factory.FactoryRoleScope;
+import org.thingsboard.server.common.data.factory.FactoryRoleScopeTargetType;
+import org.thingsboard.server.common.data.factory.FactoryScopeType;
 import org.thingsboard.server.common.data.factory.FactorySubjectRole;
 import org.thingsboard.server.common.data.factory.FactorySubjectType;
 import org.thingsboard.server.common.data.factory.FactoryUserPermissions;
@@ -62,6 +65,9 @@ public class FactoryRoleServiceImpl implements FactoryRoleService {
         log.trace("Executing saveRole [{}][{}]", tenantId, role);
         FactoryRole oldRole = role.getId() != null ? findRoleById(tenantId, role.getId()) : null;
         FactoryRole savedRole = factoryRoleDao.save(tenantId, role);
+        if (oldRole == null) {
+            factoryRoleDao.saveRoleScopes(tenantId, savedRole.getId(), List.of(createTenantScope(tenantId, savedRole)));
+        }
         eventPublisher.publishEvent(SaveEntityEvent.builder()
                 .tenantId(savedRole.getTenantId())
                 .entityId(savedRole.getId())
@@ -242,6 +248,17 @@ public class FactoryRoleServiceImpl implements FactoryRoleService {
             }
         });
         return roleIds;
+    }
+
+    private FactoryRoleScope createTenantScope(TenantId tenantId, FactoryRole role) {
+        FactoryRoleScope scope = new FactoryRoleScope();
+        scope.setTenantId(tenantId);
+        scope.setTargetType(FactoryRoleScopeTargetType.ROLE);
+        scope.setTargetId(role.getId().getId());
+        scope.setScopeType(FactoryScopeType.TENANT);
+        scope.setEntityType(EntityType.TENANT);
+        scope.setEntityId(tenantId.getId());
+        return scope;
     }
 
     private List<String> validatePermissionCodes(List<String> permissionCodes) {
